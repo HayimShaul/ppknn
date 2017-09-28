@@ -53,6 +53,7 @@ int mylog2(int x) {
 
 long L = 0;
 long p = 0;
+long r = 0;
 int resolution = 0;
 bool flex = false;
 std::vector<int> rawData;
@@ -91,13 +92,20 @@ void initialize(int argc, char **argv) {
 	std::cout << "min value " << maxValue << std::endl;
 
 	if (p == 0)
-		p = Primes::find_prime_bigger_than(2 * maxValue * maxValue);
+		p = Primes::find_prime_bigger_than(maxValue * maxValue);
+
+//	p = 2;
+	r = 1;
+//	while ((1 << r) < 2 * maxValue * maxValue)
+//		++r;
+//	++r;
 
 	int expected_L = mylog2(mylog2(maxValue)) + mylog2(mylog2(rawData.size()));
 	if (L == 0)
 		L = expected_L;
 
 	std::cout << "using p = " << p << std::endl;
+	std::cout << "using r = " << r << std::endl;
 	std::cout << "using L = " << L << std::endl;
 }
 

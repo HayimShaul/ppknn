@@ -9,6 +9,7 @@ extern int maxValue;
 
 extern long L;
 extern long p;
+extern long r;
 extern std::vector<int> rawData;
 extern bool measureAccuracy;
 

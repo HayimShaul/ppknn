@@ -82,11 +82,11 @@ int statistic_rate = 10;
 
 
 
-template<class Number>
+template<class Number, class Bits>
 class PercentileIterator {
 private:
 	const std::vector<int> *_raw_data;
-	Number _threshold;
+	Bits _threshold;
 	int _location;
 
 	Number _last_value;
@@ -94,7 +94,7 @@ private:
 
 	void copy(const PercentileIterator &a) { _raw_data = a._raw_data; _threshold = a._threshold; _location = a._location; _last_value_location = a._last_value_location; _last_value = a._last_value; }
 public:
-	PercentileIterator(const std::vector<int> *arr, const Number &thr) : _raw_data(arr), _threshold(thr), _location(0), _last_value(-1) {}
+	PercentileIterator(const std::vector<int> *arr, const Bits &thr) : _raw_data(arr), _threshold(thr), _location(0), _last_value(-1) {}
 	PercentileIterator(const PercentileIterator &a) { copy(a); }
 
 	PercentileIterator &operator=(const PercentileIterator &a) { copy(a); return *this; }
@@ -112,13 +112,18 @@ public:
 	}
 	bool operator!=(const PercentileIterator &a) const { return !operator==(a); }
 
-	Number operator*() {
+	const Number &operator*() {
 		if (_location != _last_value_location) {
-			Number xi = Number::static_from_int((*_raw_data)[_location]);
-			_last_value = (xi < _threshold);
+			Bits xi = Bits::static_from_int((*_raw_data)[_location]);
+			_last_value = Number(1) - (xi < _threshold);
+
+			if (((_last_value.to_int() == 1) && ((xi.to_int() < _threshold.to_int()))) ||
+				((_last_value.to_int() == 0) && (!(xi.to_int() < _threshold.to_int())))) {
+					std::cout << "Error comparing " << xi.to_int() << " and " << _threshold.to_int() << std::endl;
+					_last_value = Number(1) - (xi < _threshold);
+			}
 			_last_value_location = _location;
 		}
-		std::cout << "* operator = " << _last_value.to_int() << std::endl;
 		return _last_value;
 	}
 };
@@ -126,16 +131,33 @@ public:
 
 template<class Number>
 Polynomial<Number> build_sqrt_polynomial(int p) {
+	ZZ_p::init(ZZ(p));
 	Polynomial<Number> poly(0);
 
-	for (int i = 0; i < p; ++i) {
-		std::cerr << "Building sqrt polynomial " << i << " / " << p << "\r";
-		std::cerr << std::endl;
-		Polynomial<Number> i_x = Polynomial<Number>(i, "-x").set_mod(p);
-		i_x ^= phi(p);
-		
-		poly += (Polynomial<Number>(1) - i_x) * sqrt(i);
-//		poly += (Polynomial<Number>(1) - (Polynomial<Number>(i, "-x").set_mod(p))^phi(p)) * sqrt(i);
+//	for (int i = 0; i < p; ++i) {
+//		std::cerr << "Building sqrt polynomial " << i << " / " << p << "\r";
+//		std::cerr << std::endl;
+//		Polynomial<Number> i_x = Polynomial<Number>(i, "-x").set_mod(p);
+//		i_x ^= phi(p);
+//		
+////		poly += (Polynomial<Number>(1) - i_x) * sqrt(i);
+//////		poly += (Polynomial<Number>(1) - (Polynomial<Number>(i, "-x").set_mod(p))^phi(p)) * sqrt(i);
+//	}
+
+
+	int x = 1;
+	int x2 = 1;
+	while (x2 < p) {
+		Polynomial<Number> val(0);
+
+		while ((0.5+x)*(0.5+x) > x2) {
+			val *= Polynomial<Number>(x2, "-x");
+			++x2;
+		}
+		val ^= phi(p);
+		val = (-val + 1) * x;
+
+		++x;
 	}
 
 	return poly;
@@ -178,8 +200,16 @@ BitNumber get_bits(const Number &x) {
 }
 
 
-template<class NumberBits>
-NumberBits fhe_sqrt_approximation(const NumberBits &x) {
+template<class Number, class NumberBits>
+Number fhe_sqrt_approximation(const Number &_x) {
+	assert(_x.p() == 2);
+
+	NumberBits x = _x.template to_digits<NumberBits>();
+
+std::cout << "converting to bits " << _x.to_int() << " turned into " << x.to_int() << std::endl;
+
+std::cout << "x.bitlength = " << x.bitLength() << std::endl;
+
 	NumberBits ret;
 	ret.set_bit_length((x.bitLength() + 1) / 2);
 
@@ -191,24 +221,30 @@ NumberBits fhe_sqrt_approximation(const NumberBits &x) {
 		ret[x.bitLength() / 2] = x[x.bitLength() - 1];
 	}
 
-	return ret;
+	Number _ret = ret.bits_to_number();
+std::cout << "ret[0] = " << ret[0].to_int() << std::endl;
+std::cout << "ret[1] = " << ret[1].to_int() << std::endl;
+std::cout << "_ret = " << _ret.to_int() << std::endl;
+
+	return ret.bits_to_number();
 }
 
 template<class OutNumber, class TempNumber>
 void get_percentile(const std::vector<int> &_x, float percentile) {
+
 	OutNumber avgValue;
 	OutNumber avgSqrValue;
 
+//	Polynomial<OutNumber> sqrtPoly = build_sqrt_polynomial<OutNumber>(OutNumber::global_p());
+
 	n = _x.size();
 
-	AverageLipheBits<TempNumber, OutNumber, TempNumber, CompareNative<TempNumber>, TruncConversion> avg(_x.size());
-	avg.set_bit_number(5); // TODO: read it from the input
-	avg.compute_resample_constant(0.1, 0.05, 11);
-//	avg.set_resample_constant( TODO ... )
+	AverageLiphe<OutNumber, TempNumber, CompareNative<TempNumber>, TruncConversion> avg(_x.size());
+	avg.compute_resample_constant(0.1, 0.05, *(std::max_element(_x.begin(), _x.end())));
 
-	AverageLipheBits<TempNumber, OutNumber, TempNumber, CompareNative<TempNumber>, TruncConversion> avgSqr(_x.size());
-	avgSqr.set_bit_number(9); // TODO: read it from the input
-//	avgSqr.set_resample_constant( TODO ... )
+	AverageLiphe<OutNumber, TempNumber, CompareNative<TempNumber>, TruncConversion> avgSqr(_x.size());
+	avgSqr.compute_resample_constant(0.1, 0.05, *(std::max_element(_x.begin(), _x.end())));
+
 
 	for (int i = 0; i < _x.size(); ++i) {
 
@@ -242,19 +278,8 @@ void get_percentile(const std::vector<int> &_x, float percentile) {
 		}
 	}
 
-		std::cout << "\n\n===================\n";
-		std::cout << "avg (raw) = " << avg.get_bits().to_bit_stream() << std::endl;
-		std::cout << "avg (bits) = " << avg.getAverage().to_bit_stream() << std::endl;
-		std::cout << "avg  = " << avg.getAverage().to_int() << std::endl;
-		std::cout << std::endl;
-		std::cout << "avgSqr (raw) = " << avgSqr.get_bits().to_bit_stream() << std::endl;
-		std::cout << "avgSqr (bits) = " << avgSqr.getAverage().to_bit_stream() << std::endl;
-
-	std::cout << "Exiting ... \n";
-	return;
-
-	TempNumber avgEnc = avg.getAverage();
-	TempNumber avgSqrEnc = avgSqr.getAverage();
+	OutNumber avgEnc = avg.getAverage();
+	OutNumber avgSqrEnc = avgSqr.getAverage();
 
 	print_stat(-1);
 	if (measureAccuracy) {
@@ -266,10 +291,21 @@ void get_percentile(const std::vector<int> &_x, float percentile) {
 	std::cout << "avg = " << avgEnc.to_int() << std::endl;
 	std::cout << "avgSqr = " << avgSqrEnc.to_int() << std::endl;
 
-	TempNumber xxx = avgSqrEnc - avgEnc;
-	TempNumber sigma = fhe_sqrt_approximation(xxx);
+	OutNumber sigmaSqr = avgSqrEnc - avgEnc*avgEnc;
+	std::cout << "sigmaSqr = " << sigmaSqr.to_int() << std::endl;
+	OutNumber sigma = fhe_sqrt_approximation<OutNumber, TempNumber>(sigmaSqr);
 
-	TempNumber threshold = avgEnc;
+	std::cout << "sigma = " << sigma.to_int() << std::endl;
+
+
+	OutNumber threshold = avgEnc;
+	threshold += sigma;
+	threshold += sigma;
+
+	std::cout << "Threshold = " << threshold.to_int() << std::endl;
+
+	TempNumber thresholdBits = threshold.template to_digits<TempNumber>();
+std::cout << "converting to bits " << threshold.to_int() << " turned into " << thresholdBits.to_int() << std::endl;
 
 //	if (percentile == 15.8) {
 //		// take 1 sigma away from avg
@@ -282,17 +318,15 @@ void get_percentile(const std::vector<int> &_x, float percentile) {
 //		threshold -= sigma * 3;
 //	}
 
-	threshold -= (sigma << 1);
-
 //	TempNumber thresholdBits = get_bits<OutNumber, TempNumber>(threshold);
 
-	PercentileIterator<TempNumber> sigmaDist(&rawData, threshold);
+	PercentileIterator<OutNumber, TempNumber> sigmaDist(&rawData, thresholdBits);
 
 
 	int i = 0;
 	sigmaDist.begin();
 	while (!sigmaDist.is_end()) {
-		OutNumber x = (*sigmaDist).bits_to_number();
+		OutNumber x = *sigmaDist;
 		std::cout << i << ") ";
 		std::cout << "x = " << x.to_int() << "  " << std::endl;
 		++sigmaDist;

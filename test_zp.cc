@@ -18,7 +18,7 @@ typedef UnsignedWord<16, MyZP> MyZPBits;
 
 int main(int argc, char **argv) {
 	initialize(argc, argv);
-	MyZP::set_global_p(p);
+	MyZP::set_global_p(p, r);
 
 	get_percentile<MyZP, MyZPBits>(rawData, 15.8);
 }

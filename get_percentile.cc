@@ -92,7 +92,7 @@ void initialize(int argc, char **argv) {
 	std::cout << "min value " << maxValue << std::endl;
 
 	if (p == 0)
-		p = Primes::find_prime_bigger_than(maxValue * maxValue);
+		p = Primes::find_prime_bigger_than(maxValue);
 
 //	p = 2;
 	r = 1;

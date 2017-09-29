@@ -49,6 +49,7 @@ int get_mem() {
 	return rus.ru_maxrss / 1024;
 }
 
+int accuracyEnhancementBits = 3;
 int realAvg;
 int realAvgSqr;
 int n;
@@ -62,13 +63,22 @@ void print_stat(int i) {
 }
 
 template<class NUMBER>
-void print_detailed_stats(int step, NUMBER &avgTemp, NUMBER &avgSqrTemp) {
+void print_detailed_stats(int step, NUMBER &avgTemp, NUMBER &avgSqrMsdTemp, NUMBER &avgSqrLsdTemp) {
 	int avg = avgTemp.to_int();
-	int avgSqr = avgSqrTemp.to_int();
+	int avgSqrLsd = avgSqrLsdTemp.to_int();   // this is x mod p
+	int avgSqrMsd = avgSqrMsdTemp.to_int();   // this is x/2^a
+
+	int approx = avgSqrMsd << accuracyEnhancementBits;
+	int approxMod = approx % p;
+
+	int avgSqr = approx + avgSqrLsd - approxMod;
 
 	print_stat_prefix(step);
+	std::cout << std::endl;
 	std::cout << "Avg " << avg << " / " << (realAvg / n) << " = " << ((double)avg * n / realAvg) << std::endl;
-	std::cout << "Avg Sqr " << avgSqr << " / " << (realAvgSqr / n) << " = " << ((double)avgSqr * n / realAvgSqr) << std::endl;
+	std::cout << "AvgSqrLsd = " << avgSqrLsd << std::endl;
+	std::cout << "AvgSqrMsd = " << avgSqrMsd << std::endl;
+	std::cout << "AvgSqr " << avgSqr << " / " << (realAvgSqr / n) << " = " << ((double)avgSqr * n / realAvgSqr) << std::endl;
 
 }
 
@@ -242,8 +252,12 @@ void get_percentile(const std::vector<int> &_x, float percentile) {
 	AverageLiphe<OutNumber, TempNumber, CompareNative<TempNumber>, TruncConversion> avg(_x.size());
 	avg.compute_resample_constant(0.1, 0.05, *(std::max_element(_x.begin(), _x.end())));
 
-	AverageLiphe<OutNumber, TempNumber, CompareNative<TempNumber>, TruncConversion> avgSqr(_x.size());
-	avgSqr.compute_resample_constant(0.1, 0.05, *(std::max_element(_x.begin(), _x.end())));
+	AverageLiphe<OutNumber, TempNumber, CompareNative<TempNumber>, TruncConversion> avgSqrMsd(_x.size());
+	avgSqrMsd.compute_resample_constant(0.1, 0.05, *(std::max_element(_x.begin(), _x.end())));
+//	avgSqrMsd.set_m((n * avgValue.p()) >> accuracyEnhancementBits);
+
+	AverageLiphe<OutNumber, TempNumber, CompareNative<TempNumber>, TruncConversion> avgSqrLsd(_x.size());
+	avgSqrLsd.compute_resample_constant(0.1, 0.05, *(std::max_element(_x.begin(), _x.end())));
 
 
 	for (int i = 0; i < _x.size(); ++i) {
@@ -252,9 +266,15 @@ void get_percentile(const std::vector<int> &_x, float percentile) {
 
 		start_stat_interval();
 
+		realAvg += _x[i];
+		realAvgSqr += _x[i] * _x[i];
+
 		avg.add(xi);
 		OutNumber cost = xi.bits_to_number();
-		avgSqr.add_with_cost(xi, cost);
+		avgSqrLsd.add_with_cost(xi, cost);
+		
+		OutNumber costShiftet = (xi >> accuracyEnhancementBits).bits_to_number();
+		avgSqrMsd.add_with_cost(xi, costShiftet);
 
 //		std::cout << "\n\n===================\n";
 //		std::cout << "avg (raw) = " << avg.get_bits().to_bit_stream() << std::endl;
@@ -270,30 +290,33 @@ void get_percentile(const std::vector<int> &_x, float percentile) {
 			print_stat(i);
 
 			if (measureAccuracy) {
-				TempNumber avgTempEnc = avg.getAverage();
-				TempNumber avgSqrTempEnc = avgSqr.getAverage();
+				OutNumber avgTempEnc = avg.getAverage();
+				OutNumber avgSqrMsdTempEnc = avgSqrMsd.getAverage();
+				OutNumber avgSqrLsdTempEnc = avgSqrLsd.getAverage();
 
-				print_detailed_stats(i, avgTempEnc, avgSqrTempEnc);
+				print_detailed_stats(i, avgTempEnc, avgSqrMsdTempEnc, avgSqrLsdTempEnc);
 			}
 		}
 	}
 
 	OutNumber avgEnc = avg.getAverage();
-	OutNumber avgSqrEnc = avgSqr.getAverage();
+	OutNumber avgSqrMsdEnc = avgSqrMsd.getAverage();
+	OutNumber avgSqrLsdEnc = avgSqrLsd.getAverage();
 
 	print_stat(-1);
 	if (measureAccuracy) {
-		print_detailed_stats(-1, avgEnc, avgSqrEnc);
+		print_detailed_stats(-1, avgEnc, avgSqrMsdEnc, avgSqrLsdEnc);
 	}
 
 //	OutNumber sigma = sqrt_poly.compute(avgSqrEnc - avgEnc);
 
 	std::cout << "avg = " << avgEnc.to_int() << std::endl;
-	std::cout << "avgSqr = " << avgSqrEnc.to_int() << std::endl;
+	std::cout << "avgSqr = " << (avgSqrMsdEnc.to_int() * avgSqrMsdEnc.p() + avgSqrLsdEnc.to_int()) << std::endl;
 
-	OutNumber sigmaSqr = avgSqrEnc - avgEnc*avgEnc;
-	std::cout << "sigmaSqr = " << sigmaSqr.to_int() << std::endl;
-	OutNumber sigma = fhe_sqrt_approximation<OutNumber, TempNumber>(sigmaSqr);
+//	OutNumber sigmaSqr = avgSqrEnc - avgEnc*avgEnc;
+//	std::cout << "sigmaSqr = " << sigmaSqr.to_int() << std::endl;
+//	OutNumber sigma = fhe_sqrt_approximation<OutNumber, TempNumber>(sigmaSqr);
+	OutNumber sigma( sqrt( (avgSqrMsdEnc.to_int() * avgSqrMsdEnc.p() + avgSqrLsdEnc.to_int()) - avgEnc.to_int()*avgEnc.to_int() ) );
 
 	std::cout << "sigma = " << sigma.to_int() << std::endl;
 

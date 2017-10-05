@@ -62,8 +62,6 @@ void initialize(int argc, char **argv) {
 	char defaultFname[] = "-";
 	char *fname = defaultFname;
 
-	int feet = 10;
-
 	for (int argc_i = 0; argc_i < argc; ++argc_i) {
 		if (memcmp(argv[argc_i], "--p=", 4) == 0)
 			p = atoi(argv[argc_i] + 4);

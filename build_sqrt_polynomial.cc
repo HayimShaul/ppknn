@@ -66,4 +66,6 @@ std::cerr << "deg = " << deg(sqrt) << std::endl;
 
 		++x;
 	}
+
+	std::cout << sqrt << std::endl;
 }

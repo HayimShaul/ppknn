@@ -1,4 +1,4 @@
-CCFLAGS = -g --std=c++11
+CCFLAGS = -g --std=c++11 -Wall
 
 #NTLINCDIR = -I/home/hayim/academic/fhe/ntl-9.6.2/include
 #NTLLIBDIR = -L/home/hayim/academic/fhe/ntl-9.6.2/src

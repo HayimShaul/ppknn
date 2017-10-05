@@ -11,8 +11,21 @@
 #include <average.h>
 
 #include "get_percentile_framework.h"
+#include "get_percentile.h"
+#include "special_polynomials.h"
 
 typedef UnsignedWord<16, HelibNumber> HelibBits;
+
+
+template<class Number>
+Polynomial<Number> SpecialPolynomials<Number>::square_msd_polynomial;
+
+template<class Number>
+Polynomial<Number> SpecialPolynomials<Number>::sqrt_polynomial;
+
+template<class Number>
+std::vector<Polynomial<Number> > SpecialPolynomials<Number>::convert_to_bit;
+
 
 
 int main(int argc, char**argv) {
@@ -34,7 +47,10 @@ int main(int argc, char**argv) {
 	keys.initKeys(s, R, p, r, d, c, k, 64, L, chosen_m, gens, ords);
 	HelibNumber::set_global_keys(&keys);
 
+	SpecialPolynomials<HelibNumber>::init_polynomials(p);
+
 	get_percentile<HelibNumber, HelibBits>(rawData, 15.8);
+	return 0;
 }
 
 int main2(int argc, char**argv) {
@@ -73,4 +89,6 @@ int main2(int argc, char**argv) {
 
 	bit *= 8;
 	std::cout << "2bit = " << bit.to_int() << std::endl;
+
+	return 0;
 }

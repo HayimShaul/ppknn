@@ -7,8 +7,7 @@
 
 #include "polynomial.h"
 #include "get_percentile.h"
-
-
+#include "special_polynomials.h"
 
 
 
@@ -49,7 +48,6 @@ int get_mem() {
 	return rus.ru_maxrss / 1024;
 }
 
-int accuracyEnhancementBits = 3;
 int realAvg;
 int realAvgSqr;
 int n;
@@ -68,10 +66,7 @@ void print_detailed_stats(int step, NUMBER &avgTemp, NUMBER &avgSqrMsdTemp, NUMB
 	int avgSqrLsd = avgSqrLsdTemp.to_int();   // this is x mod p
 	int avgSqrMsd = avgSqrMsdTemp.to_int();   // this is x/2^a
 
-	int approx = avgSqrMsd << accuracyEnhancementBits;
-	int approxMod = approx % p;
-
-	int avgSqr = approx + avgSqrLsd - approxMod;
+	int avgSqr = avgSqrMsd *p + avgSqrLsd;
 
 	print_stat_prefix(step);
 	std::cout << std::endl;
@@ -84,7 +79,7 @@ void print_detailed_stats(int step, NUMBER &avgTemp, NUMBER &avgSqrMsdTemp, NUMB
 
 inline int sqr(int x) { return x*x; }
 
-int statistic_rate = 10;
+unsigned int statistic_rate = 10;
 
 
 
@@ -97,10 +92,10 @@ class PercentileIterator {
 private:
 	const std::vector<int> *_raw_data;
 	Bits _threshold;
-	int _location;
+	unsigned int _location;
 
 	Number _last_value;
-	int _last_value_location;
+	unsigned int _last_value_location;
 
 	void copy(const PercentileIterator &a) { _raw_data = a._raw_data; _threshold = a._threshold; _location = a._location; _last_value_location = a._last_value_location; _last_value = a._last_value; }
 public:
@@ -138,114 +133,70 @@ public:
 	}
 };
 
+//template<class Number>
+//Number simulate_square_msd_polynomial(const Number &x) {
+//#warning this is a simulation
+//	int _x = x.to_int();
+//	_x *= _x;
+//	_x /= p;
 
-template<class Number>
-Polynomial<Number> build_sqrt_polynomial(int p) {
-	ZZ_p::init(ZZ(p));
-	Polynomial<Number> poly(0);
+//	return Number(_x);
+//}
 
-//	for (int i = 0; i < p; ++i) {
-//		std::cerr << "Building sqrt polynomial " << i << " / " << p << "\r";
-//		std::cerr << std::endl;
-//		Polynomial<Number> i_x = Polynomial<Number>(i, "-x").set_mod(p);
-//		i_x ^= phi(p);
-//		
-////		poly += (Polynomial<Number>(1) - i_x) * sqrt(i);
-//////		poly += (Polynomial<Number>(1) - (Polynomial<Number>(i, "-x").set_mod(p))^phi(p)) * sqrt(i);
-//	}
+//template<class Number>
+//Number  simulate_sqrt_polynomial(const Number &x) {
+//#warning this is a simulation
+//
+//	int _x = x.to_int();
+//	_x = ::sqrt(_x);
+//
+//	return Number(_x);
+//}
 
-
-	int x = 1;
-	int x2 = 1;
-	while (x2 < p) {
-		Polynomial<Number> val(0);
-
-		while ((0.5+x)*(0.5+x) > x2) {
-			val *= Polynomial<Number>(x2, "-x");
-			++x2;
-		}
-		val ^= phi(p);
-		val = (-val + 1) * x;
-
-		++x;
-	}
-
-	return poly;
-}
-
-
-template<class Number>
-Number get_bit(const Number &x, int bit) {
-	Polynomial<Number> p(0);
-
-	for (int i = 0; i < x.p(); ++i) {
-		if ((i & (1 << bit)) == 1) {
-			Polynomial<Number> i_x = Polynomial<Number>(i, "-x");
-			i_x ^= phi(x.p());
-			p += Polynomial<Number>(1) - i_x;
-
-//			p += Polynomial<Number>(1) - Polynomial<Number>(i, "-x")^phi(x.p());
-		}
-	}
-
-	return p.compute(x);
-}
-
-
-template<class Number, class BitNumber>
-BitNumber get_bits(const Number &x) {
-	BitNumber ret;
-
-	int bit_size = 1;
-	while ((1 << bit_size) < x.p())
-		++bit_size;
-
-	ret.set_bit_length(bit_size);
-
-	for (int i = 0; i < bit_size; ++i) {
-		ret.set_bit(i, get_bit(x, i));
-	}
-
-	return ret;
-}
-
-
-template<class Number, class NumberBits>
-Number fhe_sqrt_approximation(const Number &_x) {
-	assert(_x.p() == 2);
-
-	NumberBits x = _x.template to_digits<NumberBits>();
-
-std::cout << "converting to bits " << _x.to_int() << " turned into " << x.to_int() << std::endl;
-
-std::cout << "x.bitlength = " << x.bitLength() << std::endl;
+template<class NumberBits, class Number>
+NumberBits convert_to_bits(const Number &x) {
+	int bits = 0;
+	while ((1 << bits) < p)
+		++bits;
 
 	NumberBits ret;
-	ret.set_bit_length((x.bitLength() + 1) / 2);
+	ret.set_bit_length(bits);
 
-	for (int i = 0; i < x.bitLength() / 2; ++i) {
-		ret[i] = x[2*i] + x[2*i+1] - ( x[2*i] * x[2*i+1] );
-	}
+	int batch_size = 0;
+	Number *powers = SpecialPolynomials<Number>::convert_to_bit[0].compute_powers(x, batch_size);
+	for (int i = 0; i < bits; ++i)
+		ret.set_bit(i, SpecialPolynomials<Number>::convert_to_bit[i].compute(x, powers, batch_size) );
 
-	if ((x.bitLength() % 2) == 1) {
-		ret[x.bitLength() / 2] = x[x.bitLength() - 1];
-	}
+	delete[] powers;
 
-	Number _ret = ret.bits_to_number();
-std::cout << "ret[0] = " << ret[0].to_int() << std::endl;
-std::cout << "ret[1] = " << ret[1].to_int() << std::endl;
-std::cout << "_ret = " << _ret.to_int() << std::endl;
+	return ret;
 
-	return ret.bits_to_number();
+//#warning this is a simulation
+//
+//	int _x = x.to_int();
+//
+//	int bits = 0;
+//	while ((1 << bits) < _x)
+//		++bits;
+//
+//	NumberBits ret;
+//	ret.set_bit_length(bits);
+//
+//	for (int i = 0; i < bits; ++i)
+//		ret.set_bit(i, Number((_x >> i) & 1 ));
+//
+//	return ret;
 }
+
+
+
+
 
 template<class OutNumber, class TempNumber>
 void get_percentile(const std::vector<int> &_x, float percentile) {
 
 	OutNumber avgValue;
 	OutNumber avgSqrValue;
-
-//	Polynomial<OutNumber> sqrtPoly = build_sqrt_polynomial<OutNumber>(OutNumber::global_p());
 
 	n = _x.size();
 
@@ -254,13 +205,20 @@ void get_percentile(const std::vector<int> &_x, float percentile) {
 
 	AverageLiphe<OutNumber, TempNumber, CompareNative<TempNumber>, TruncConversion> avgSqrMsd(_x.size());
 	avgSqrMsd.compute_resample_constant(0.1, 0.05, *(std::max_element(_x.begin(), _x.end())));
-//	avgSqrMsd.set_m((n * avgValue.p()) >> accuracyEnhancementBits);
+	avgSqrMsd.set_f_m( [](int m)->int{ return ::sqrt(m)*p; } );
 
 	AverageLiphe<OutNumber, TempNumber, CompareNative<TempNumber>, TruncConversion> avgSqrLsd(_x.size());
 	avgSqrLsd.compute_resample_constant(0.1, 0.05, *(std::max_element(_x.begin(), _x.end())));
+	avgSqrLsd.set_f_m( [](int m)->int{ return ::sqrt(m); } );
 
 
-	for (int i = 0; i < _x.size(); ++i) {
+
+
+	////////////////////////////////////
+	// Start computing average and average of squares
+	////////////////////////////////////
+
+	for (unsigned int i = 0; i < _x.size(); ++i) {
 
 		TempNumber xi(_x[i]);
 
@@ -270,11 +228,8 @@ void get_percentile(const std::vector<int> &_x, float percentile) {
 		realAvgSqr += _x[i] * _x[i];
 
 		avg.add(xi);
-		OutNumber cost = xi.bits_to_number();
-		avgSqrLsd.add_with_cost(xi, cost);
-		
-		OutNumber costShiftet = (xi >> accuracyEnhancementBits).bits_to_number();
-		avgSqrMsd.add_with_cost(xi, costShiftet);
+		avgSqrLsd.add(xi);
+		avgSqrMsd.add(xi);
 
 //		std::cout << "\n\n===================\n";
 //		std::cout << "avg (raw) = " << avg.get_bits().to_bit_stream() << std::endl;
@@ -299,9 +254,48 @@ void get_percentile(const std::vector<int> &_x, float percentile) {
 		}
 	}
 
+	////////////////////////////////////
+	// End computing average and average of squares
+	////////////////////////////////////
+
+
+
+
+	////////////////////////////////////
+	// start computing threshold
+	////////////////////////////////////
+
+	start_stat_interval();
+
 	OutNumber avgEnc = avg.getAverage();
+	OutNumber avgLsdEnc = avgEnc * avgEnc;
+//	OutNumber avgMsdEnc = simulate_square_msd_polynomial(avgEnc);
+	OutNumber avgMsdEnc = SpecialPolynomials<OutNumber>::square_msd_polynomial.compute(avgEnc);
+
+//std::cerr << "square of " << avgEnc.to_int() << " = " << " lsd= " << avgLsdEnc.to_int() << " msd= " << avgMsdEnc.to_int() << std::endl;
 	OutNumber avgSqrMsdEnc = avgSqrMsd.getAverage();
 	OutNumber avgSqrLsdEnc = avgSqrLsd.getAverage();
+//	OutNumber sigma =  simulate_sqrt_polynomial( avgSqrMsdEnc - avgMsdEnc )
+//						+ simulate_sqrt_polynomial( avgSqrLsdEnc - avgLsdEnc );
+	OutNumber sigma = SpecialPolynomials<OutNumber>::sqrt_polynomial.compute( avgSqrMsdEnc - avgMsdEnc )
+						+ SpecialPolynomials<OutNumber>::sqrt_polynomial.compute( avgSqrLsdEnc - avgLsdEnc );
+
+	OutNumber threshold = avgEnc;
+	threshold += sigma;
+	threshold += sigma;
+
+	TempNumber thresholdBits = convert_to_bits<TempNumber, OutNumber>(threshold);
+
+	////////////////////////////////////
+	// end computing threshold
+	////////////////////////////////////
+
+	end_stat_interval();
+
+
+
+
+
 
 	print_stat(-1);
 	if (measureAccuracy) {
@@ -311,23 +305,12 @@ void get_percentile(const std::vector<int> &_x, float percentile) {
 //	OutNumber sigma = sqrt_poly.compute(avgSqrEnc - avgEnc);
 
 	std::cout << "avg = " << avgEnc.to_int() << std::endl;
-	std::cout << "avgSqr = " << (avgSqrMsdEnc.to_int() * avgSqrMsdEnc.p() + avgSqrLsdEnc.to_int()) << std::endl;
-
-//	OutNumber sigmaSqr = avgSqrEnc - avgEnc*avgEnc;
-//	std::cout << "sigmaSqr = " << sigmaSqr.to_int() << std::endl;
-//	OutNumber sigma = fhe_sqrt_approximation<OutNumber, TempNumber>(sigmaSqr);
-	OutNumber sigma( sqrt( (avgSqrMsdEnc.to_int() * avgSqrMsdEnc.p() + avgSqrLsdEnc.to_int()) - avgEnc.to_int()*avgEnc.to_int() ) );
-
+	std::cout << "avgSqr = " << (avgSqrMsdEnc.to_int() * p + avgSqrLsdEnc.to_int()) << std::endl;
 	std::cout << "sigma = " << sigma.to_int() << std::endl;
-
-
-	OutNumber threshold = avgEnc;
-	threshold += sigma;
-	threshold += sigma;
-
+	std::cout << "real sigma = " <<  ( ::sqrt(realAvgSqr/n - realAvg*realAvg/(n*n)) ) << std::endl;
 	std::cout << "Threshold = " << threshold.to_int() << std::endl;
 
-	TempNumber thresholdBits = threshold.template to_digits<TempNumber>();
+
 std::cout << "converting to bits " << threshold.to_int() << " turned into " << thresholdBits.to_int() << std::endl;
 
 //	if (percentile == 15.8) {
@@ -346,16 +329,41 @@ std::cout << "converting to bits " << threshold.to_int() << " turned into " << t
 	PercentileIterator<OutNumber, TempNumber> sigmaDist(&rawData, thresholdBits);
 
 
+
+
+
+
+	////////////////////////////////////
+	// start reporting points
+	////////////////////////////////////
+
+	start_stat_interval();
+
 	int i = 0;
 	sigmaDist.begin();
 	while (!sigmaDist.is_end()) {
 		OutNumber x = *sigmaDist;
+
+		end_stat_interval();
 		std::cout << i << ") ";
 		std::cout << "x = " << x.to_int() << "  " << std::endl;
+		print_stat(i);
 		++sigmaDist;
 		++i;
+		start_stat_interval();
 	}
 	std::cout << std::endl;
+
+
+	////////////////////////////////////
+	// end reporting points
+	////////////////////////////////////
+
+	end_stat_interval();
+
+
+	print_stat(-1);
+
 //	report(sigmaDist, compactRepresentation)
 }
 

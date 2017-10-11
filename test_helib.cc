@@ -14,7 +14,7 @@
 #include "get_percentile.h"
 #include "special_polynomials.h"
 
-typedef UnsignedWord<16, HelibNumber> HelibBits;
+typedef UnsignedWord<18, HelibNumber> HelibBits;
 
 
 template<class Number>

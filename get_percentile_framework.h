@@ -8,6 +8,7 @@
 #include "polynomial.h"
 #include "get_percentile.h"
 #include "special_polynomials.h"
+#include "input_iterator.h"
 
 
 
@@ -189,7 +190,27 @@ NumberBits convert_to_bits(const Number &x) {
 }
 
 
+template<class Number>
+Number fold(Number n) {
+	AddBinomialTournament<Number> ret;
 
+	int end = n.simd_factor();
+	int simd_factor = n.simd_factor();
+	int batch = 1;
+	while (simd_factor != 0) {
+		if ((simd_factor & 1) != 0) {
+			ret.add_to_tournament( n.rotate_left(end - batch) );
+			end -= batch;
+		}
+
+		n += n.rotate_left(batch);
+
+		simd_factor >>= 1;
+		batch <<= 1;
+	}
+
+	return ret.unite_all();
+}
 
 
 template<class OutNumber, class TempNumber>
@@ -201,14 +222,17 @@ void get_percentile(const std::vector<int> &_x, float percentile) {
 	n = _x.size();
 
 	AverageLiphe<OutNumber, TempNumber, CompareNative<TempNumber>, TruncConversion> avg(_x.size());
-	avg.compute_resample_constant(0.1, 0.05, *(std::max_element(_x.begin(), _x.end())));
+	avg.set_max_sample(*(std::max_element(_x.begin(), _x.end())));
+	avg.compute_resample_constant(0.1, 0.05);
 
 	AverageLiphe<OutNumber, TempNumber, CompareNative<TempNumber>, TruncConversion> avgSqrMsd(_x.size());
-	avgSqrMsd.compute_resample_constant(0.1, 0.05, *(std::max_element(_x.begin(), _x.end())));
+	avgSqrMsd.set_max_sample(*(std::max_element(_x.begin(), _x.end())));
+	avgSqrMsd.compute_resample_constant(0.1, 0.05);
 	avgSqrMsd.set_f_m( [](int m)->int{ return ::sqrt(m)*p; } );
 
 	AverageLiphe<OutNumber, TempNumber, CompareNative<TempNumber>, TruncConversion> avgSqrLsd(_x.size());
-	avgSqrLsd.compute_resample_constant(0.1, 0.05, *(std::max_element(_x.begin(), _x.end())));
+	avgSqrLsd.set_max_sample(*(std::max_element(_x.begin(), _x.end())));
+	avgSqrLsd.compute_resample_constant(0.1, 0.05);
 	avgSqrLsd.set_f_m( [](int m)->int{ return ::sqrt(m); } );
 
 
@@ -218,18 +242,39 @@ void get_percentile(const std::vector<int> &_x, float percentile) {
 	// Start computing average and average of squares
 	////////////////////////////////////
 
-	for (unsigned int i = 0; i < _x.size(); ++i) {
+//	unsigned int i = 0;
+//	while (i < _x.size()) {
 
-		TempNumber xi(_x[i]);
+//		unsigned int simd_begin = i;
+//		unsigned int simd_end = i + TempNumber::simd_factor();
+//		if (simd_end > _x.size())
+//			simd_end = _x.size();
+//
+//		std::vector<int> simd_vector(TempNumber::simd_factor());
+//		auto to_zero = std::copy(_x.begin() + simd_begin,  _x.begin() + simd_end, simd_vector.begin());
+//		for (; to_zero != simd_vector.end(); ++to_zero)
+//			*to_zero = 0;
+//
+//		while (i < simd_end) {
+//			realAvg += _x[i];
+//			realAvgSqr += _x[i] * _x[i];
+//			++i;
+//		}
+//
+//		TempNumber xi(simd_vector);
+
+	InputIterator<TempNumber, std::vector<int>::const_iterator> input(_x.begin(), _x.end());
+	unsigned int i = 0;
+	while (!input.is_end()) {
+		TempNumber xi = *input;
+		++input;
 
 		start_stat_interval();
 
-		realAvg += _x[i];
-		realAvgSqr += _x[i] * _x[i];
+		avg.add_simd(xi);
+		avgSqrLsd.add_simd(xi);
+		avgSqrMsd.add_simd(xi);
 
-		avg.add(xi);
-		avgSqrLsd.add(xi);
-		avgSqrMsd.add(xi);
 
 //		std::cout << "\n\n===================\n";
 //		std::cout << "avg (raw) = " << avg.get_bits().to_bit_stream() << std::endl;
@@ -239,19 +284,28 @@ void get_percentile(const std::vector<int> &_x, float percentile) {
 //		std::cout << "avgSqr (raw) = " << avgSqr.get_bits().to_bit_stream() << std::endl;
 //		std::cout << "avgSqr (bits) = " << avgSqr.getAverage().to_bit_stream() << std::endl;
 
+
+		unsigned int xii = i * TempNumber::simd_factor();
+		while ((xii < _x.size()) && (xii < (i + 1) * TempNumber::simd_factor())) {
+			realAvg += _x[xii];
+			realAvgSqr += _x[xii] * _x[xii];
+			++xii;
+		}
+
 		end_stat_interval();
 
 		if ((i % statistic_rate) == statistic_rate - 1) {
 			print_stat(i);
 
 			if (measureAccuracy) {
-				OutNumber avgTempEnc = avg.getAverage();
-				OutNumber avgSqrMsdTempEnc = avgSqrMsd.getAverage();
-				OutNumber avgSqrLsdTempEnc = avgSqrLsd.getAverage();
+				OutNumber avgTempEnc = fold(avg.getAverage());
+				OutNumber avgSqrMsdTempEnc = fold(avgSqrMsd.getAverage());
+				OutNumber avgSqrLsdTempEnc = fold(avgSqrLsd.getAverage());
 
 				print_detailed_stats(i, avgTempEnc, avgSqrMsdTempEnc, avgSqrLsdTempEnc);
 			}
 		}
+		++i;
 	}
 
 	////////////////////////////////////
@@ -267,14 +321,14 @@ void get_percentile(const std::vector<int> &_x, float percentile) {
 
 	start_stat_interval();
 
-	OutNumber avgEnc = avg.getAverage();
+	OutNumber avgEnc = fold(avg.getAverage());
 	OutNumber avgLsdEnc = avgEnc * avgEnc;
 //	OutNumber avgMsdEnc = simulate_square_msd_polynomial(avgEnc);
 	OutNumber avgMsdEnc = SpecialPolynomials<OutNumber>::square_msd_polynomial.compute(avgEnc);
 
 //std::cerr << "square of " << avgEnc.to_int() << " = " << " lsd= " << avgLsdEnc.to_int() << " msd= " << avgMsdEnc.to_int() << std::endl;
-	OutNumber avgSqrMsdEnc = avgSqrMsd.getAverage();
-	OutNumber avgSqrLsdEnc = avgSqrLsd.getAverage();
+	OutNumber avgSqrMsdEnc = fold(avgSqrMsd.getAverage());
+	OutNumber avgSqrLsdEnc = fold(avgSqrLsd.getAverage());
 //	OutNumber sigma =  simulate_sqrt_polynomial( avgSqrMsdEnc - avgMsdEnc )
 //						+ simulate_sqrt_polynomial( avgSqrLsdEnc - avgLsdEnc );
 	OutNumber sigma = SpecialPolynomials<OutNumber>::sqrt_polynomial.compute( avgSqrMsdEnc - avgMsdEnc )
@@ -326,7 +380,7 @@ std::cout << "converting to bits " << threshold.to_int() << " turned into " << t
 
 //	TempNumber thresholdBits = get_bits<OutNumber, TempNumber>(threshold);
 
-	PercentileIterator<OutNumber, TempNumber> sigmaDist(&rawData, thresholdBits);
+//	PercentileIterator<OutNumber, TempNumber> sigmaDist(&rawData, thresholdBits);
 
 
 
@@ -339,27 +393,44 @@ std::cout << "converting to bits " << threshold.to_int() << " turned into " << t
 
 	start_stat_interval();
 
-	int i = 0;
-	sigmaDist.begin();
-	while (!sigmaDist.is_end()) {
-		OutNumber x = *sigmaDist;
+//	i = 0;
+//	sigmaDist.begin();
+//	while (!sigmaDist.is_end()) {
+//		OutNumber x = *sigmaDist;
+//
+//		end_stat_interval();
+//		std::cout << i << ") ";
+//		std::cout << "x = " << x.to_int() << "  " << std::endl;
+//		print_stat(i);
+//		++sigmaDist;
+//		++i;
+//		start_stat_interval();
+//	}
+//	std::cout << std::endl;
 
-		end_stat_interval();
-		std::cout << i << ") ";
-		std::cout << "x = " << x.to_int() << "  " << std::endl;
-		print_stat(i);
-		++sigmaDist;
-		++i;
+	i = 0;
+	input.set_to_begin();
+	while (!input.is_end()) {
+		TempNumber xi = *input;
+		++input;
+
 		start_stat_interval();
+		OutNumber reportEnc = xi > thresholdBits;
+		end_stat_interval();
+
+		std::vector<long int> report = reportEnc.to_vector();
+		for (auto ri = report.begin(); ri != report.end(); ++ri) {
+			if (i < _x.size()) {
+				std::cout << i << ") " << "x = " << *ri << std::endl;
+				++i;
+			}
+		}
 	}
-	std::cout << std::endl;
 
 
 	////////////////////////////////////
 	// end reporting points
 	////////////////////////////////////
-
-	end_stat_interval();
 
 
 	print_stat(-1);

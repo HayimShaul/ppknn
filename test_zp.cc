@@ -13,9 +13,9 @@
 #include "get_percentile.h"
 #include "special_polynomials.h"
 
-#define SIMD_FACTOR 2
+#define SIMD_FACTOR 200
 typedef ZP<SIMD_FACTOR> MyZP;
-typedef UnsignedWord<16, MyZP> MyZPBits;
+typedef UnsignedWord<18, MyZP> MyZPBits;
 
 template<class Number>
 Polynomial<Number> SpecialPolynomials<Number>::square_msd_polynomial;

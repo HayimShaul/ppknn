@@ -18,11 +18,11 @@ HEADSUPLIBDIR = -L../liphe/src
 LIBS = $(HEADSUPLIBDIR) -lliphe $(FHELIBDIR) -lfhe $(NTLLIBDIR) -lntl -lgmp
 INCS = $(NTLINCDIR) $(FHEINCDIR) $(HEADSUPINCDIR)
 
-all: test_zp test_helib build_sqrt_polynomial
+all: test_zp test_helib test_folding
 
 #all: test min fast_min min2 min3
 
-build_sqrt_polynomial: build_sqrt_polynomial.o
+test_folding: test_folding.o
 	g++ $(LDFLAGS) -o $@ $^ $(LIBS)
 
 test_zp: test_zp.o get_percentile.o mem.o

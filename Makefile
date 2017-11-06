@@ -15,8 +15,8 @@ FHELIBDIR = -L/home/hayim/academic/fhe/HElib/src
 HEADSUPINCDIR = -I../liphe/include
 HEADSUPLIBDIR = -L../liphe/src
 
-LIBS = $(HEADSUPLIBDIR) -lliphe $(FHELIBDIR) -lfhe $(NTLLIBDIR) -lntl -lgmp
-INCS = $(NTLINCDIR) $(FHEINCDIR) $(HEADSUPINCDIR)
+LIBS = $(HEADSUPLIBDIR) -lliphe $(FHELIBDIR) -lfhe $(NTLLIBDIR) -lntl -lgmp -lpthread
+INCS = -I../../json/src $(NTLINCDIR) $(FHEINCDIR) $(HEADSUPINCDIR)
 
 all: test_zp test_helib test_folding
 
@@ -25,10 +25,10 @@ all: test_zp test_helib test_folding
 test_folding: test_folding.o
 	g++ $(LDFLAGS) -o $@ $^ $(LIBS)
 
-test_zp: test_zp.o get_percentile.o mem.o
+test_zp: test_zp.o get_percentile.o point2d.o mem.o
 	g++ $(LDFLAGS) -o $@ $^ $(LIBS)
 
-test_helib: test_helib.o get_percentile.o mem.o
+test_helib: test_helib.o get_percentile.o point2d.o mem.o
 	g++ $(LDFLAGS) -o $@ $^ $(LIBS)
 
 

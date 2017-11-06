@@ -7,6 +7,9 @@
 
 #include <NTL/ZZ_pX.h>
 
+#include "thread_pool.h"
+#include "binomial_tournament.h"
+
 
 template<class Number>
 class Polynomial {
@@ -39,6 +42,12 @@ public:
 	Polynomial(int n, const char *x = NULL) : _mod(0) { set(n, x); }
 
 	Polynomial &set_mod(int n) { _mod = n; return *this; }
+
+	Polynomial &operator=(const Polynomial &p) {
+		_coef = p._coef;
+		_mod = p._mod;
+		return *this;
+	}
 
 	Polynomial operator*(const Polynomial<Number> &p) const { Polynomial<Number> q(*this); q *= p; return q; }
 	void operator*=(const Polynomial<Number> &p) {
@@ -189,14 +198,24 @@ std::cerr << "computing power of " << p << std::endl;
 		_coef[n] = c;
 	}
 
-	Number batch_coefficient(const std::vector<int> &coef, int start, int end, const Number *powers) const {
-		Number ret = coef[start];
-		for (int i = start+1; i < end; ++i)
-			ret += powers[i-start] * coef[i];
+	static Number batch_coefficient(const std::vector<int> &coef, int start, int end, const Number *powers) {
+		AddBinomialTournament<Number> ret;
+
+		ret.add_to_tournament(Number(coef[start]));
+
+		for (int i = start+1; i < end; ++i) {
+			ret.add_to_tournament( powers[i-start] * coef[i] );
+		}
+		return ret.unite_all();
+	}
+
+	Number compute(const Number &x, const Number *powers, int batch_size, ThreadPool *threads) const {
+		Number ret;
+		compute(ret, x, powers, batch_size, threads);
 		return ret;
 	}
 
-	Number compute(const Number &x, const Number *powers, int batch_size) const {
+	void compute(Number &ret, const Number &x, const Number *powers, int batch_size, ThreadPool *threads) const {
 		Polynomial<Number> p = (*this) % x.p();
 
 //		for (int i = 0; i < coef.size(); ++i)
@@ -212,30 +231,77 @@ std::cerr << "computing power of " << p << std::endl;
 		else
 			batch_multiplier[1] = powers[batch_size/2] * powers[(batch_size+1)/2];
 
-		Number ret = batch_coefficient(p._coef, /*start=*/ 0, /*end=*/batch_size, powers);
-		ret += batch_coefficient(p._coef, /*start=*/ batch_size, /*end=*/ std::min(2*batch_size, p.deg()+1), powers) * batch_multiplier[1];
+
+		bool ret_is_empty = true;
+		std::mutex access_ret;
+
+		std::function<void(Number)> add_to_ret([&ret, &ret_is_empty, &access_ret](Number a) {
+			access_ret.lock();
+			if (ret_is_empty)
+				ret = a;
+			else
+				ret += a;
+			ret_is_empty = false;
+			access_ret.unlock();
+		});
+
+		std::function<void(std::function<void(void)>) > run([threads](std::function<void(void)> f) {
+			if (threads == NULL)
+				f();
+			else
+				threads->submit_job(f);
+		});
+
+		run(std::function<void(void)>([&p, batch_size, powers, &add_to_ret](){
+			add_to_ret( batch_coefficient(p._coef, /*start=*/ 0, /*end=*/batch_size, powers) );
+		}));
+
+		run(std::function<void(void)>([&p, batch_size, powers, batch_multiplier, &add_to_ret](){
+			add_to_ret( batch_coefficient(p._coef, /*start=*/ batch_size, /*end=*/ std::min(2*batch_size, p.deg()+1), powers) * batch_multiplier[1] );
+		}));
+
 
 		for (int i = 2; i < batch_number; ++i) {
 			int a = i/2;
 			int b = (i+1)/2;
 			batch_multiplier[i] = batch_multiplier[a] * batch_multiplier[b];
-			ret += batch_coefficient(p._coef, /*start=*/ i*batch_size, (i+1)*batch_size, powers) * batch_multiplier[i];
+
+			run(std::function<void(void)>([&p, i, batch_size, powers, batch_multiplier, &add_to_ret]() {
+				add_to_ret( batch_coefficient(p._coef, /*start=*/ i*batch_size, (i+1)*batch_size, powers) * batch_multiplier[i] );
+			}));
 		}
 
 		if (batch_number * batch_size < p.deg()+1) {
-			int a = batch_number/2;
-			int b = (batch_number+1)/2;
-			Number batch_mult = batch_multiplier[a] * batch_multiplier[b];
-			ret += batch_coefficient(p._coef, /*start=*/ batch_number*batch_size, p.deg()+1, powers) * batch_mult;
+
+			run(std::function<void(void)>([&p, batch_number, batch_size, powers, batch_multiplier, &add_to_ret]() {
+				int a = batch_number/2;
+				int b = (batch_number+1)/2;
+				add_to_ret( batch_coefficient(p._coef, /*start=*/ batch_number*batch_size, p.deg()+1, powers) * batch_multiplier[a] * batch_multiplier[b] );
+			}));
 		}
 
-		delete[] batch_multiplier;
+		if (threads != NULL)
+			threads->process_jobs();
 
-		return ret;
+//		for (int i = 2; i < batch_number; ++i) {
+//			int a = i/2;
+//			int b = (i+1)/2;
+//			batch_multiplier[i] = batch_multiplier[a] * batch_multiplier[b];
+//			ret += batch_coefficient(p._coef, /*start=*/ i*batch_size, (i+1)*batch_size, powers) * batch_multiplier[i];
+//		}
+//
+//		if (batch_number * batch_size < p.deg()+1) {
+//			int a = batch_number/2;
+//			int b = (batch_number+1)/2;
+//			Number batch_mult = batch_multiplier[a] * batch_multiplier[b];
+//			ret += batch_coefficient(p._coef, /*start=*/ batch_number*batch_size, p.deg()+1, powers) * batch_mult;
+//		}
+
+		delete[] batch_multiplier;
 	}
 
 	Number *compute_powers(const Number &x, int &batch_size) const {
-		if (batch_size == 0) {
+		if (batch_size <= 0) {
 			int degree = deg() % x.p();
 			batch_size = sqrt(degree + 1);
 			if (batch_size * batch_size < degree + 1)
@@ -257,7 +323,13 @@ std::cerr << "computing power of " << p << std::endl;
 		return powers;
 	}
 
-	Number compute(const Number &x) const {
+	Number compute(const Number &x, ThreadPool *threads = NULL) const {
+		Number ret;
+		compute(ret, x, threads);
+		return ret;
+	}
+
+	void compute(Number &ret, const Number &x, ThreadPool *threads = NULL) const {
 		Polynomial<Number> p = (*this) % x.p();
 
 //		for (int i = 0; i < coef.size(); ++i)
@@ -271,10 +343,13 @@ std::cerr << "computing power of " << p << std::endl;
 		
 		Number *powers = compute_powers(x, batch_size);
 
-		Number ret = compute(x, powers, batch_size);
-		delete[] powers;
+		if (batch_size == 0) {
+			std::cerr << "Error: batch size is 0\n";
+			powers = compute_powers(x, batch_size);
+		}
 
-		return ret;
+		compute(ret, x, powers, batch_size, threads);
+		delete[] powers;
 
 
 //		int batch_number = (p.deg() + 1) / batch_size;

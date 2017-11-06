@@ -13,7 +13,7 @@
 #include "get_percentile.h"
 #include "special_polynomials.h"
 
-#define SIMD_FACTOR 200
+#define SIMD_FACTOR 1
 typedef ZP<SIMD_FACTOR> MyZP;
 typedef UnsignedWord<18, MyZP> MyZPBits;
 
@@ -21,10 +21,16 @@ template<class Number>
 Polynomial<Number> SpecialPolynomials<Number>::square_msd_polynomial;
 
 template<class Number>
+Polynomial<Number> SpecialPolynomials<Number>::sqrt_msd_polynomial;
+
+template<class Number>
 Polynomial<Number> SpecialPolynomials<Number>::sqrt_polynomial;
 
 template<class Number>
 std::vector<Polynomial<Number> > SpecialPolynomials<Number>::convert_to_bit;
+
+template<class Number>
+Polynomial<Number> SpecialPolynomials<Number>::abs_polynomial;
 
 int main(int argc, char **argv) {
 	initialize(argc, argv);
@@ -32,6 +38,26 @@ int main(int argc, char **argv) {
 
 	SpecialPolynomials<MyZP>::init_polynomials(p);
 
-	get_percentile<MyZP, MyZPBits>(rawData, 15.8);
+	secure_geo_search<MyZP, MyZPBits>(rawDiscreteData, discreteQuery);
+	return 0;
+}
+
+int main2(int argc, char **argv) {
+//	initialize(argc, argv);
+
+	p = 23;
+	r = 1;
+
+	MyZP::set_global_p(p, r);
+
+	SpecialPolynomials<MyZP>::init_polynomials(p);
+
+	for (int i = 0; i < 1; ++i) {
+		MyZP n(i);
+		MyZP m = SpecialPolynomials<MyZP>::sqrt_polynomial.compute(n);
+
+		std::cerr << "sqrt(" << n.to_int() << ") = " << m.to_int() << std::endl;
+	}
+	return 0;
 }
 

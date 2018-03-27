@@ -3,8 +3,11 @@
 
 #include <sys/resource.h>
 #include <sys/types.h>
+#include <sys/time.h>
 #include <vector>
 #include <thread>
+
+#include <time_measurements.h>
 
 #include "polynomial.h"
 #include "get_percentile.h"
@@ -12,17 +15,8 @@
 #include "input_database.h"
 
 
+TakeTimes global_timer;
 
-time_t start = 0;
-time_t total = 0;
-
-void start_stat_interval() {
-	start = clock();
-}
-
-void end_stat_interval() {
-	total += clock() - start;
-}
 
 void print_stat_prefix(int i) {
 	std::cout << "After ";
@@ -54,7 +48,7 @@ int n;
 
 void print_stat(int i) {
 	print_stat_prefix(i);
-	std::cout << "Took " << total << " micro" << std::endl;
+	std::cout << global_timer.stats("Everything") << std::endl;
 
 	print_stat_prefix(i);
 	std::cout << "Used " << get_mem() << " MegaBytes" << std::endl;
@@ -169,26 +163,52 @@ void multithreaded_averages(Distances<Number, NumberBits> &_x, Number &avg, Numb
 
 	ThreadPool threads;
 
-	typename Distances<Number, NumberBits>::Iterator input = _x.begin();
+	{
+		AutoTakeTimes tt("populating cache");
 
-	while (input != _x.end()) {
-		while (!threads.has_free_cpu())
-			threads.process_jobs(1);
+		typename Distances<Number, NumberBits>::Iterator input = _x.begin();
+		input.set_thread_pool(&threads);
 
-		std::shared_ptr<NumberBits> xi(new NumberBits(*input));
+		// populate the cache
+		while (input != _x.end()) {
+			while (!threads.has_free_cpu())
+				threads.process_jobs(1);
 
-		avgAvg.add_simd(xi, &mutexAvg, &threads);
-		avgAvgSqrMsd.add_simd(xi, &mutexAvgSqrMsd, &threads);
-		avgAvgSqrLsd.add_simd(xi, &mutexAvgSqrLsd, &threads);
+			std::shared_ptr<NumberBits> xi(new NumberBits(*input));
 
-		++input;
+			++input;
+		}
+		threads.process_jobs();
 	}
 
-	threads.process_jobs();
 
-	avg = avgAvg.getAverage();
-	sqrMsd = avgAvgSqrMsd.getAverage();
-	sqrLsd = avgAvgSqrLsd.getAverage();
+	{
+		AutoTakeTimes tt("computing averages");
+
+		typename Distances<Number, NumberBits>::Iterator input = _x.begin();
+		while (input != _x.end()) {
+			while (!threads.has_free_cpu())
+			threads.process_jobs(1);
+
+			std::shared_ptr<NumberBits> xi(new NumberBits(*input));
+
+			avgAvg.add_simd(xi, &mutexAvg, &threads);
+			avgAvgSqrMsd.add_simd(xi, &mutexAvgSqrMsd, &threads);
+			avgAvgSqrLsd.add_simd(xi, &mutexAvgSqrLsd, &threads);
+
+			++input;
+		}
+		threads.process_jobs();
+	}
+
+
+	{
+		AutoTakeTimes tt("getting averages");
+
+		avg = avgAvg.getAverage();
+		sqrMsd = avgAvgSqrMsd.getAverage();
+		sqrLsd = avgAvgSqrLsd.getAverage();
+	}
 
 	delete[] thread;
 }
@@ -199,6 +219,7 @@ void multithreaded_averages(Distances<Number, NumberBits> &_x, Number &avg, Numb
 
 template<class Number, class NumberBits>
 void secure_geo_search(const std::vector<Point2D<int> > &sites, const Point2D<int> &query) {
+
 	Distances<Number, NumberBits> distances(sites, query);
 	unsigned int i = 0;
 
@@ -211,107 +232,27 @@ void secure_geo_search(const std::vector<Point2D<int> > &sites, const Point2D<in
 	// Start computing average and average of squares
 	////////////////////////////////////
 
-#ifdef MULTI_THREADED
 	Number avgEnc;
 	Number avgSqrMsdEnc;
 	Number avgSqrLsdEnc;
 
-	multithreaded_averages<Number, NumberBits>(distances, avgEnc, avgSqrMsdEnc, avgSqrLsdEnc);
-
-	avgEnc = fold(avgEnc);
-	avgSqrMsdEnc = fold(avgSqrMsdEnc);
-	avgSqrLsdEnc = fold(avgSqrLsdEnc);
-
-#else
-#	error no more single thread
-//	AverageLiphe<Number, NumberBits, CompareNative<NumberBits>, TruncConversion> avg(_x.size());
-//	avg.set_max_sample(*(std::max_element(_x.begin(), _x.end())));
-//	avg.compute_resample_constant(0.1, 0.05);
-//
-//	AverageLiphe<Number, NumberBits, CompareNative<NumberBits>, TruncConversion> avgSqrMsd(_x.size());
-//	avgSqrMsd.set_max_sample(*(std::max_element(_x.begin(), _x.end())));
-//	avgSqrMsd.compute_resample_constant(0.1, 0.05);
-//	avgSqrMsd.set_f_m( [](int m)->int{ return ::sqrt(m*p); } );
-//
-//	AverageLiphe<Number, NumberBits, CompareNative<NumberBits>, TruncConversion> avgSqrLsd(_x.size());
-//	avgSqrLsd.set_max_sample(*(std::max_element(_x.begin(), _x.end())));
-//	avgSqrLsd.compute_resample_constant(0.1, 0.05);
-//	avgSqrLsd.set_f_m( [](int m)->int{ return ::sqrt(m); } );
-//
-//
-//	i = 0;
-//	input.set_to_begin();
-//	while (!input.is_end()) {
-//		NumberBits xi = *input;
-//		++input;
-//
-//		start_stat_interval();
-//
-//		avg.add_simd(xi);
-//		avgSqrLsd.add_simd(xi);
-//		avgSqrMsd.add_simd(xi);
-//
-//
-////		std::cout << "\n\n===================\n";
-////		std::cout << "avg (raw) = " << avg.get_bits().to_bit_stream() << std::endl;
-////		std::cout << "avg (bits) = " << avg.getAverage().to_bit_stream() << std::endl;
-////		std::cout << "avg  = " << avg.getAverage().to_int() << std::endl;
-////		std::cout << std::endl;
-////		std::cout << "avgSqr (raw) = " << avgSqr.get_bits().to_bit_stream() << std::endl;
-////		std::cout << "avgSqr (bits) = " << avgSqr.getAverage().to_bit_stream() << std::endl;
-//
-//
-//		unsigned int xii = i * NumberBits::simd_factor();
-//		while ((xii < _x.size()) && (xii < (i + 1) * NumberBits::simd_factor())) {
-//			realAvg += _x[xii];
-//			realAvgSqr += _x[xii] * _x[xii];
-//			++xii;
-//		}
-//
-//		end_stat_interval();
-//
-//		if ((i % statistic_rate) == statistic_rate - 1) {
-//			print_stat(i);
-//
-//			if (measureAccuracy) {
-//				Number avgTempEnc = fold(avg.getAverage());
-//				Number avgSqrMsdTempEnc = fold(avgSqrMsd.getAverage());
-//				Number avgSqrLsdTempEnc = fold(avgSqrLsd.getAverage());
-//
-//				print_detailed_stats(i, avgTempEnc, avgSqrMsdTempEnc, avgSqrLsdTempEnc);
-//			}
-//		}
-//		++i;
-//	}
-////
-//	start_stat_interval();
-//
-//	Number avgEnc = fold(avg.getAverage());
-//	Number avgSqrMsdEnc = fold(avgSqrMsd.getAverage());
-//	Number avgSqrLsdEnc = fold(avgSqrLsd.getAverage());
-//
-//	end_stat_interval();
-//
-#endif
-
-	int realAvg = 0;
-	int realAvgSqr = 0;
-	for (auto i = sites.begin(); i != sites.end(); ++i) {
-		int dist = abs((*i).x - query.x) + abs((*i).y - query.y);
-		realAvg += dist;
-		realAvgSqr += dist*dist;
+	{
+		global_timer.start();
+		multithreaded_averages<Number, NumberBits>(distances, avgEnc, avgSqrMsdEnc, avgSqrLsdEnc);
+		std::cout << global_timer.end("computin averages");
 	}
-	realAvg /= sites.size();
-	realAvgSqr /= sites.size();
 
-	std::cout << "real avg = " << realAvg << std::endl;
-	std::cout << "real avgSqr = " << realAvgSqr << std::endl;
-	std::cout << "real avgSqr / p = " << (realAvgSqr / p) << std::endl;
-	std::cout << "real avgSqr % p = " << (realAvgSqr % p) << std::endl;
 
-	std::cout << "avg = " << avgEnc.to_int() << std::endl;
-	std::cout << "avgSqr / p = " << avgSqrMsdEnc.to_int() << std::endl;
-	std::cout << "avgSqr % p = " <<  avgSqrLsdEnc.to_int() << std::endl;
+	{
+		AutoTakeTimes tt("folding vectors");
+
+		global_timer.start();
+		avgEnc = fold(avgEnc);
+		avgSqrMsdEnc = fold(avgSqrMsdEnc);
+		avgSqrLsdEnc = fold(avgSqrLsdEnc);
+		std::cout << global_timer.end("folding");
+	}
+
 
 	////////////////////////////////////
 	// End computing average and average of squares
@@ -328,30 +269,72 @@ void secure_geo_search(const std::vector<Point2D<int> > &sites, const Point2D<in
 	{
 		ThreadPool threads;
 
-		start_stat_interval();
+		global_timer.start();
 
 		Number avgLsdEnc = avgEnc * avgEnc;
 		Number avgMsdEnc;
-		SpecialPolynomials<Number>::square_msd_polynomial.compute(avgMsdEnc, avgEnc, &threads);
+		{
+			AutoTakeTimes tt("computing avg sqaure");
+			SpecialPolynomials<Number>::square_msd_polynomial.compute(avgMsdEnc, avgEnc, &threads);
+		}
 
-//std::cerr << "square of " << avgEnc.to_int() << " = " << " lsd= " << avgLsdEnc.to_int() << " msd= " << avgMsdEnc.to_int() << std::endl;
-//		Number sigma =  simulate_sqrt_polynomial( avgSqrMsdEnc - avgMsdEnc )
-//							+ simulate_sqrt_polynomial( avgSqrLsdEnc - avgLsdEnc );
-		Number sigma = SpecialPolynomials<Number>::sqrt_msd_polynomial.compute( avgSqrMsdEnc - avgMsdEnc, &threads );
-		sigma += SpecialPolynomials<Number>::sqrt_polynomial.compute( avgSqrLsdEnc - avgLsdEnc, &threads );
+		Number sigma;
+		{
+			AutoTakeTimes tt("computing sigma");
+			sigma = SpecialPolynomials<Number>::sqrt_msd_polynomial.compute( avgSqrMsdEnc - avgMsdEnc, &threads );
+			sigma += SpecialPolynomials<Number>::sqrt_polynomial.compute( avgSqrLsdEnc - avgLsdEnc, &threads );
+		}
 
 		Number threshold = avgEnc;
 		threshold -= sigma;
 
-		convert_to_bits<NumberBits, Number>(thresholdBits, threshold, &threads);
+		{
+			AutoTakeTimes tt("converting threshold to bits");
 
-		threads.process_jobs();
+			convert_to_bits<NumberBits, Number>(thresholdBits, threshold, &threads);
+			threads.process_jobs();
+		}
 
-		end_stat_interval();
 
-		std::cout << "sigma = sqrt_msd(" << (avgSqrMsdEnc - avgMsdEnc).to_int() << ") + " << "sqrt_lsd(" << (avgSqrLsdEnc - avgLsdEnc).to_int() << std::endl;
-		std::cout << "sigma = " << sigma.to_int() << std::endl;
-		std::cout << "real sigma = " <<  ( ::sqrt(realAvgSqr/n - realAvg*realAvg/(n*n)) ) << std::endl;
+		std::cout << global_timer.end("compute threashold");
+
+
+
+
+
+		int realAvg = 0;
+		int realAvgSqr = 0;
+		for (auto i = sites.begin(); i != sites.end(); ++i) {
+			int dist = abs((*i).x - query.x) + abs((*i).y - query.y);
+			realAvg += dist;
+		realAvgSqr += dist*dist;
+		}
+		realAvg /= sites.size();
+		realAvgSqr /= sites.size();
+
+//		std::cout << "real avg = " << realAvg << std::endl;
+//
+//		std::cout << "real avg^2 = " << (realAvg*realAvg) << std::endl;
+//		std::cout << "real avg^2 / p = " << (realAvg*realAvg / p) << std::endl;
+//		std::cout << "real avg^2 % p = " << (realAvg*realAvg % p) << std::endl;
+//
+//		std::cout << "real avgSqr = " << realAvgSqr << std::endl;
+//		std::cout << "real avgSqr / p = " << (realAvgSqr / p) << std::endl;
+//		std::cout << "real avgSqr % p = " << (realAvgSqr % p) << std::endl;
+
+		std::cout << "avg = " << avgEnc.to_int()  << "         (real = " << realAvg << ")" << std::endl;
+
+		std::cout << "avg^2 = " << (avgMsdEnc.to_int()*p + avgLsdEnc.to_int()) << "        (real = " << (realAvg*realAvg) << ")" << std::endl;
+		std::cout << "avg^2 / p = " << avgMsdEnc.to_int() <<  "            (real = " << (realAvg*realAvg / p) << ")" << std::endl;
+		std::cout << "avg^2 % p = " << avgLsdEnc.to_int() << "             (real = " << (realAvg*realAvg % p) << ")" << std::endl;
+
+		std::cout << "avgSqr = " << (avgSqrMsdEnc.to_int()*p + avgSqrLsdEnc.to_int()) << "          (real = " << realAvgSqr << ")" << std::endl;
+		std::cout << "avgSqr / p = " << avgSqrMsdEnc.to_int() << "        (real = " << (realAvgSqr / p) << ")" << std::endl;
+		std::cout << "avgSqr % p = " <<  avgSqrLsdEnc.to_int() << "        (real = " << (realAvgSqr % p) << ")" << std::endl;
+
+
+		std::cout << "sigma = sqrt_msd(" << (avgSqrMsdEnc - avgMsdEnc).to_int() << ") + " << "sqrt_lsd(" << (avgSqrLsdEnc - avgLsdEnc).to_int() << ")" << std::endl;
+		std::cout << "sigma = " << sigma.to_int() << "            (real = " << ::sqrt(-realAvg*realAvg + realAvgSqr) << ")" << std::endl;
 		std::cout << "Threshold = " << threshold.to_int() << std::endl;
 		std::cout << "converting to bits " << threshold.to_int() << " turned into " << thresholdBits.to_int() << std::endl;
 
@@ -373,24 +356,32 @@ void secure_geo_search(const std::vector<Point2D<int> > &sites, const Point2D<in
 	// start reporting points
 	////////////////////////////////////
 
+	bool OK = true;
 	i = 0;
 	auto dist = distances.begin();
 	while (dist != distances.end()) {
 		NumberBits xi = *dist;
 		++dist;
 
-		start_stat_interval();
+		global_timer.start();
 		Number reportEnc = xi < thresholdBits;
-		end_stat_interval();
+		std::cout << global_timer.end("reporting points");
+
+		std::cout << "depth = mul " << reportEnc.mul_depth() << " add " << reportEnc.add_depth() << std::endl;
 
 		std::vector<long int> report = reportEnc.to_vector();
 		for (auto ri = report.begin(); ri != report.end(); ++ri) {
 			if (i < sites.size()) {
+				if ((*ri != 0) && (*ri != 1))
+					OK = false;
 				std::cout << i << ") " << "x = " << *ri << std::endl;
 				++i;
 			}
 		}
 	}
+
+	if (OK)
+		std::cout << "test is ok" << std::endl;
 
 
 	////////////////////////////////////

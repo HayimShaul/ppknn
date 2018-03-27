@@ -19,7 +19,4 @@ extern Point2D<int> discreteQuery;
 
 void initialize(int argc, char **argv);
 
-#define maxX 500
-#define maxY 500
-
 #endif

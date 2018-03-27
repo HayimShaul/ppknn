@@ -29,9 +29,6 @@ Polynomial<Number> SpecialPolynomials<Number>::sqrt_polynomial;
 template<class Number>
 std::vector<Polynomial<Number> > SpecialPolynomials<Number>::convert_to_bit;
 
-template<class Number>
-Polynomial<Number> SpecialPolynomials<Number>::abs_polynomial;
-
 
 
 int main(int argc, char**argv) {

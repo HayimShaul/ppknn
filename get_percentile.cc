@@ -31,6 +31,9 @@ Point2D<int> discreteQuery;
 Point2D<float> minPoint;
 Point2D<float> maxPoint;
 
+int maxX = 100;
+int maxY = 100;
+
 std::vector<Point2D<float> > read_data(const char *fname) {
 	std::vector<Point2D<float> > points;
 
@@ -77,18 +80,27 @@ long r = 0;
 bool flex = false;
 int thread_num = 1;
 
+
 void initialize(int argc, char **argv) {
 	char defaultFname[] = "-";
 	char *fname = defaultFname;
 	bool no_query = true;
+	int n = -1;
+	bool has_fname = false;
 
 	for (int argc_i = 0; argc_i < argc; ++argc_i) {
-		if (memcmp(argv[argc_i], "--p=", 4) == 0)
+		if (memcmp(argv[argc_i], "--p=", 4) == 0) {
 			p = atoi(argv[argc_i] + 4);
+			maxX = maxY = p/2;
+		}
+		if (memcmp(argv[argc_i], "--n=", 4) == 0)
+			n = atoi(argv[argc_i] + 4);
 		if (memcmp(argv[argc_i], "--L=", 4) == 0)
 			L = atoi(argv[argc_i] + 4);
-		if (memcmp(argv[argc_i], "--in=", 5) == 0)
+		if (memcmp(argv[argc_i], "--in=", 5) == 0) {
 			fname = argv[argc_i] + 5;
+			has_fname = true;
+		}
 		if (memcmp(argv[argc_i], "--q=", 4) == 0) {
 			float x, y;
 			if ((sscanf(argv[argc_i] + 4, "%f,%f", &x, &y) != 2) &&
@@ -104,33 +116,86 @@ void initialize(int argc, char **argv) {
 
 		if (strcmp(argv[argc_i], "--help") == 0) {
 			std::cout << "   --L=" << std::endl;
-			std::cout << "   --size=" << std::endl;
+			std::cout << "   --p=" << std::endl;
+			std::cout << "   --n= how many points to generate (can't go with --in)" << std::endl;
 			std::cout << "   --in=" << std::endl;
 			std::cout << "   --q= query point" << std::endl;
 			std::cout << "   --t= thread number" << std::endl;
 		}
 	}
 
+	if (has_fname && ((n != -1) || (p > 0))) {
+		std::cout << "Can't have --in together with --p or --n" << std::endl;
+		exit(1);
+	}
 
-	rawData = read_data(fname);
+	if ((n > -1) && (p == 0)) {
+		std::cout << "--p should be given when --n is given" << std::endl;
+		exit(1);
+	}
+
+
+	if (has_fname) {
+		rawData = read_data(fname);
+
+		maxPoint = rawData[0];
+		minPoint = rawData[0];
+		for (auto i = rawData.begin(); i != rawData.end(); ++i) {
+			maxPoint = max(maxPoint, *i);
+			minPoint = min(minPoint, *i);
+		}
+
+		std::cout << "min value " << minPoint << std::endl;
+		std::cout << "min value " << maxPoint << std::endl;
+
+		discreteBase = minPoint;
+		discreteResolution = Point2D<float>(maxX, maxY) / (maxPoint - minPoint);
+
+		std::cout << "Discrete data:" << std::endl;
+		rawDiscreteData.resize(0);
+		for (auto i = rawData.begin(); i != rawData.end(); ++i) {
+			Point2D<int> p = discretify(*i);
+			rawDiscreteData.push_back(p);
+			std::cout << "  " << p << std::endl;
+		}
+	} else {
+		std::default_random_engine _generator(clock());
+		std::uniform_int_distribution<int> xDistribution(0, maxX);
+		std::uniform_int_distribution<int> yDistribution(0, maxY);
+		for (int i = 0; i < n; ++i) {
+			int x = xDistribution(_generator);
+			int y = yDistribution(_generator);
+			Point2D<float> raw_p( x, y );
+			Point2D<int> p( x, y );
+
+			std::cout << "point[" << i << "] = " << p << std::endl;
+			rawData.push_back(raw_p);
+			rawDiscreteData.push_back(p);
+		}
+
+		maxPoint = Point2D<float>(maxX, maxY);
+		minPoint = Point2D<float>(0, 0);
+
+		std::cout << "min value " << minPoint << std::endl;
+		std::cout << "min value " << maxPoint << std::endl;
+
+		discreteBase = minPoint;
+		discreteResolution = Point2D<float>(maxX, maxY) / (maxPoint - minPoint);
+
+		std::cout << "Discrete data:" << std::endl;
+		for (auto i = rawDiscreteData.begin(); i != rawDiscreteData.end(); ++i) {
+			std::cout << "  " << (*i) << std::endl;
+		}
+	}
+
+
+
 
 	if (rawData.size() == 0) {
 		std::cout << "No data read" << std::endl;
 		exit(1);
 	}
 
-	maxPoint = rawData[0];
-	minPoint = rawData[0];
-	for (auto i = rawData.begin(); i != rawData.end(); ++i) {
-		maxPoint = max(maxPoint, *i);
-		minPoint = min(minPoint, *i);
-	}
-
-	std::cout << "min value " << minPoint << std::endl;
-	std::cout << "min value " << maxPoint << std::endl;
-
-	discreteBase = minPoint;
-	discreteResolution = Point2D<float>(maxX, maxY) / (maxPoint - minPoint);
 
 	if (no_query) {
 		std::default_random_engine generator(clock());
@@ -144,13 +209,6 @@ void initialize(int argc, char **argv) {
 	}
 	
 
-	std::cout << "Discrete data:" << std::endl;
-	rawDiscreteData.resize(0);
-	for (auto i = rawData.begin(); i != rawData.end(); ++i) {
-		Point2D<int> p = discretify(*i);
-		rawDiscreteData.push_back(p);
-		std::cout << "  " << p << std::endl;
-	}
 
 	std::cout << "Discrete query: "  << discreteQuery << std::endl;
 
@@ -184,7 +242,7 @@ void initialize(int argc, char **argv) {
 
 	for (auto i = rawDiscreteData.begin(); i != rawDiscreteData.end(); ++i) {
 		int dist = abs(i->x - discreteQuery.x) + abs(i->y - discreteQuery.y);
-		int bucket = (dist - avg) / (sigma/3) + 10;
+		int bucket = (dist - avg) / ((sigma+2)/3) + 10;
 
 		if (bucket > 18)
 			bucket = 18;
@@ -196,12 +254,11 @@ void initialize(int argc, char **argv) {
 
 	int bucket = 0;
 	for (auto i = distribution_test.begin(); i != distribution_test.end(); ++i) {
-		std::cout << ((bucket - 10) * (sigma/3) + avg)  << ": " << *i << std::endl;
+		std::cout << ((bucket - 10) * ((sigma+2)/3) + avg)  << ": " << *i << std::endl;
 		++bucket;
 	}
 
-	if (p == 0)
-		p = Primes::find_prime_bigger_than(2*(std::max(maxX, maxY)));
+	p = Primes::find_prime_bigger_than(maxX + maxY);
 
 //	p = 2;
 	r = 1;

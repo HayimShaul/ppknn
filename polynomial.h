@@ -113,7 +113,6 @@ public:
 	// no need to optimize this because this is happening in plain text anyway
 	void operator^=(int p) { *this = (*this) ^ p; }
 	Polynomial<Number> operator^(int p) const {
-std::cerr << "computing power of " << p << std::endl;
 		if (p == 0)
 			return Polynomial<Number>(1).set_mod(_mod);
 
@@ -232,24 +231,21 @@ std::cerr << "computing power of " << p << std::endl;
 			batch_multiplier[1] = powers[batch_size/2] * powers[(batch_size+1)/2];
 
 
-		bool ret_is_empty = true;
+		AddBinomialTournament<Number> add_ret;
 		std::mutex access_ret;
 
-		std::function<void(Number)> add_to_ret([&ret, &ret_is_empty, &access_ret](Number a) {
+		std::function<void(Number)> add_to_ret([&add_ret, &access_ret](Number a) {
 			access_ret.lock();
-			if (ret_is_empty)
-				ret = a;
-			else
-				ret += a;
-			ret_is_empty = false;
+			add_ret.add_to_tournament(a);
 			access_ret.unlock();
 		});
 
-		std::function<void(std::function<void(void)>) > run([threads](std::function<void(void)> f) {
-			if (threads == NULL)
+		std::function<void(std::function<void(void)>) > run([threads](const std::function<void(void)> &f) {
+			if (threads == NULL) {
 				f();
-			else
+			} else {
 				threads->submit_job(f);
+			}
 		});
 
 		run(std::function<void(void)>([&p, batch_size, powers, &add_to_ret](){
@@ -298,6 +294,7 @@ std::cerr << "computing power of " << p << std::endl;
 //		}
 
 		delete[] batch_multiplier;
+		ret = add_ret.unite_all();
 	}
 
 	Number *compute_powers(const Number &x, int &batch_size) const {

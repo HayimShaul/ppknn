@@ -18,11 +18,14 @@ private:
 	Point2D<int> _query;
 	std::map<int, std::string> _cache;
 public:
-	Distances(const Sites &sites, const Point2D<int> &q) : _sites(sites), _query(q) {}
+	Distances(const Sites &sites, const Point2D<int> &q, ThreadPool *threads = NULL) : _sites(sites), _query(q) {}
 
 	unsigned int size() const { return _sites.size(); }
 	NumberBits operator[] (unsigned int at) {
+		return get(at);
+	}
 
+	NumberBits get(unsigned int at, ThreadPool *threads = NULL) {
 		std::string fname = _cache[at];
 		if (fname != std::string("")) {
 			std::ifstream f( fname );
@@ -53,16 +56,34 @@ public:
 			++i;
 		}
 
-		Number xSiteEnc(xSite);
-		Number ySiteEnc(ySite);
 
-		Number xQueryEnc(xQuery);
-		Number yQueryEnc(yQuery);
+		Number ret;
 
-		Number ret = SpecialPolynomials<Number>::abs_polynomial.compute(xSiteEnc - xQueryEnc) + SpecialPolynomials<Number>::abs_polynomial.compute(ySiteEnc - yQueryEnc);
+		{
+			Number xSiteEnc(xSite);
+			NumberBits xSiteBitsEnc(xSite);
+
+			Number xQueryEnc(xQuery);
+			NumberBits xQueryBitsEnc(xQuery);
+
+			ret = (xSiteEnc - xQueryEnc) * ((xQueryBitsEnc < xSiteBitsEnc)*2 - 1);
+		}
+
+
+		{
+			Number ySiteEnc(ySite);
+			NumberBits ySiteBitsEnc(ySite);
+
+			Number yQueryEnc(yQuery);
+			NumberBits yQueryBitsEnc(yQuery);
+
+			ret += (ySiteEnc - yQueryEnc) * ((yQueryBitsEnc < ySiteBitsEnc)*2 - 1);
+		}
+
+
 
 		NumberBits retBits;
-		convert_to_bits<NumberBits, Number>(retBits, ret, NULL);
+		convert_to_bits<NumberBits, Number>(retBits, ret, threads);
 
 		std::stringstream sfname;
 		sfname << cache_prefix << at << ".ctxt";
@@ -78,9 +99,11 @@ public:
 	private:
 		Distances &_db;
 		unsigned int _loc;
+		ThreadPool *_threads;
 	public:
-		Iterator(Distances &db) : _db(db), _loc(0) {}
-		Iterator(Distances &db, int i) : _db(db), _loc(i) {}
+		Iterator(Distances &db, ThreadPool *thr = NULL) : _db(db), _loc(0), _threads(thr) {}
+		Iterator(Distances &db, int i, ThreadPool *thr = NULL) : _db(db), _loc(i), _threads(thr) {}
+		void set_thread_pool(ThreadPool *t) { _threads = t; }
 
 		bool operator==(const Iterator &i) const { return _loc == i._loc; }
 		bool operator!=(const Iterator &i) const { return !operator==(i); }
@@ -99,7 +122,7 @@ public:
 
 		void operator+=(int a) { for (int i = 0; i < a; ++i) operator++(); }
 
-		NumberBits operator*() { return _db[_loc]; }
+		NumberBits operator*() { return _db.get(_loc, _threads); }
 	};
 
 

@@ -48,15 +48,28 @@ std::vector<Point2D<float> > read_data(const char *fname) {
 	json j;
 	(*in) >> j;
 
-	points.resize( j["HotelListResponse"]["HotelList"]["HotelSummary"].size() );
-	j = j["HotelListResponse"]["HotelList"]["HotelSummary"];
-	int i = 0;
-	for (json::iterator it = j.begin(); it != j.end(); ++it) {
-		Point2D<float> p( (*it)["longitude"], (*it)["latitude"] );
+	if (j.find("HotelListResponse") != j.end()) {
+		points.resize( j["HotelListResponse"]["HotelList"]["HotelSummary"].size() );
+		j = j["HotelListResponse"]["HotelList"]["HotelSummary"];
+		int i = 0;
+		for (json::iterator it = j.begin(); it != j.end(); ++it) {
+			Point2D<float> p( (*it)["longitude"], (*it)["latitude"] );
 
-		std::cout << "point[" << i << "] = " << p << std::endl;
-		points[i] = p;
-		++i;
+			std::cout << "point[" << i << "] = " << p << std::endl;
+			points[i] = p;
+			++i;
+		}
+	} else if (j.find("2Ddata") != j.end()) {
+		points.resize( j["2Ddata"].size() );
+		j = j["2Ddata"];
+		int i = 0;
+		for (json::iterator it = j.begin(); it != j.end(); ++it) {
+			Point2D<float> p( (*it)["x"], (*it)["y"] );
+
+			std::cout << "point[" << i << "] = " << p << std::endl;
+			points[i] = p;
+			++i;
+		}
 	}
 
 	if (in != &(std::cin))

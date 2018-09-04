@@ -1,11 +1,5 @@
 CCFLAGS = -g --std=c++11 -Wall -O3
 
-#NTLINCDIR = -I/home/hayim/academic/fhe/ntl-9.6.2/include
-#NTLLIBDIR = -L/home/hayim/academic/fhe/ntl-9.6.2/src
-#
-#FHEINCDIR = -I/home/hayim/academic/fhe/HElib-master/src
-#FHELIBDIR = -L/home/hayim/academic/fhe/HElib-master/src
-
 NTLINCDIR = -I../ntl-10.5.0-multithread/include
 NTLLIBDIR = ../ntl-10.5.0-multithread/src
 

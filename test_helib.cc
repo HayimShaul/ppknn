@@ -52,7 +52,8 @@ int main(int argc, char**argv) {
 
 	SpecialPolynomials<HelibNumber>::init_polynomials(p);
 
-	secure_geo_search<HelibNumber, HelibBits>(rawDiscreteData, discreteQuery);
+//	secure_geo_search<HelibNumber, HelibBits>(rawDiscreteData, discreteQuery);
+	secure_knn_classifier<HelibNumber, HelibBits>(rawDiscreteData, rawDataClasses, discreteQuery);
 	return 0;
 }
 

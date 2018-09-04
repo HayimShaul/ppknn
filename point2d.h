@@ -43,9 +43,12 @@ inline std::ostream &operator<<(std::ostream &out, const Point2D<Number> &p) {
 extern Point2D<float> discreteBase;
 extern Point2D<float> discreteResolution;
 
+inline int myround(float f) { return (int)(f+0.5); }
+
 inline Point2D<int> discretify(const Point2D<float> &a) {
 	Point2D<float> _a = (a - discreteBase) * discreteResolution;
-	return Point2D<int>((int)_a.x, (int)_a.y);
+//	return Point2D<int>((int)_a.x, (int)_a.y);
+	return Point2D<int>(myround(_a.x), myround(_a.y));
 }
 
 inline Point2D<float> undiscretify(const Point2D<int> &a) {

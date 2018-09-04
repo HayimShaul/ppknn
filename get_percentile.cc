@@ -22,6 +22,7 @@ bool measureAccuracy = true;
 
 std::vector<Point2D<float> > rawData;
 std::vector<Point2D<int> > rawDiscreteData;
+std::vector<int> rawDataClasses;
 
 Point2D<float> query;
 Point2D<int> discreteQuery;
@@ -34,9 +35,53 @@ Point2D<float> maxPoint;
 int maxX = 100;
 int maxY = 100;
 
-std::vector<Point2D<float> > read_data(const char *fname) {
-	std::vector<Point2D<float> > points;
+bool read_csv_line(std::istream *in, float &x, float &y, int &cls) {
+	std::string str;
 
+	try {
+		if (!getline(*in, str, ','))
+			return false;
+		x = std::stod(str);
+
+		if (!getline(*in, str, ','))
+			return false;
+		y = std::stod(str);
+
+		if (!getline(*in, str, '\n'))
+			return false;
+		cls = std::stoi(str);
+	} catch (std::exception &e) {
+		return false;
+	}
+
+	return true;
+}
+
+// read a csv file given as x,y,c   where c=0,1 is the class of a point and (x,y) is the coordinates
+void read_classifier_data(const char *fname) {
+	std::istream *in;
+
+	if (strcmp(fname, "-") == 0) {
+		in = &(std::cin);
+	} else {
+		in = new std::ifstream(fname);
+	}
+
+	float x,y;
+	int c;
+	while (read_csv_line(in, x,y,c)) {
+		std::cout << "read " << x << ", " << y << ", " << c << std::endl;
+		Point2D<float> p(x,y);
+		rawData.push_back(p);
+		rawDataClasses.push_back(c);
+	}
+
+	if (in != &(std::cin))
+		delete in;
+}
+
+// read data from expedia json
+void read_hotel_data(const char *fname) {
 	std::istream *in;
 
 	if (strcmp(fname, "-") == 0) {
@@ -49,33 +94,31 @@ std::vector<Point2D<float> > read_data(const char *fname) {
 	(*in) >> j;
 
 	if (j.find("HotelListResponse") != j.end()) {
-		points.resize( j["HotelListResponse"]["HotelList"]["HotelSummary"].size() );
+		rawData.resize( j["HotelListResponse"]["HotelList"]["HotelSummary"].size() );
 		j = j["HotelListResponse"]["HotelList"]["HotelSummary"];
 		int i = 0;
 		for (json::iterator it = j.begin(); it != j.end(); ++it) {
 			Point2D<float> p( (*it)["longitude"], (*it)["latitude"] );
 
 			std::cout << "point[" << i << "] = " << p << std::endl;
-			points[i] = p;
+			rawData[i] = p;
 			++i;
 		}
 	} else if (j.find("2Ddata") != j.end()) {
-		points.resize( j["2Ddata"].size() );
+		rawData.resize( j["2Ddata"].size() );
 		j = j["2Ddata"];
 		int i = 0;
 		for (json::iterator it = j.begin(); it != j.end(); ++it) {
 			Point2D<float> p( (*it)["x"], (*it)["y"] );
 
 			std::cout << "point[" << i << "] = " << p << std::endl;
-			points[i] = p;
+			rawData[i] = p;
 			++i;
 		}
 	}
 
 	if (in != &(std::cin))
 		delete in;
-
-	return points;
 }
 
 
@@ -106,6 +149,8 @@ void initialize(int argc, char **argv) {
 			p = atoi(argv[argc_i] + 4);
 			maxX = maxY = p/2;
 		}
+		if (memcmp(argv[argc_i], "--res=", 6) == 0)
+			maxX = maxY = atoi(argv[argc_i] + 6);
 		if (memcmp(argv[argc_i], "--n=", 4) == 0)
 			n = atoi(argv[argc_i] + 4);
 		if (memcmp(argv[argc_i], "--L=", 4) == 0)
@@ -128,6 +173,7 @@ void initialize(int argc, char **argv) {
 			ThreadPool::init(atoi(argv[argc_i] + 4));
 
 		if (strcmp(argv[argc_i], "--help") == 0) {
+			std::cout << "   --res= set maxX and maxY" << std::endl;
 			std::cout << "   --L=" << std::endl;
 			std::cout << "   --p=" << std::endl;
 			std::cout << "   --n= how many points to generate (can't go with --in)" << std::endl;
@@ -149,8 +195,10 @@ void initialize(int argc, char **argv) {
 
 
 	if (has_fname) {
-		rawData = read_data(fname);
+//		rawData = read_data(fname);
+		read_classifier_data(fname);
 
+		// Find the maximal and minimal x and y coordinates
 		maxPoint = rawData[0];
 		minPoint = rawData[0];
 		for (auto i = rawData.begin(); i != rawData.end(); ++i) {
@@ -249,6 +297,7 @@ void initialize(int argc, char **argv) {
 	std::cout << "avg = " << avg << std::endl;
 	std::cout << "sigma = " << sigma << std::endl;
 
+	std::cout << "Histogram:" << std::endl;
 	std::vector<int> distribution_test(20);
 	for (auto i = distribution_test.begin(); i != distribution_test.end(); ++i)
 		*i = 0;

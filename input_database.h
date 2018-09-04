@@ -15,17 +15,23 @@ public:
 
 private:
 	const Sites &_sites;
+	const std::vector<int> _classes;
 	Point2D<int> _query;
 	std::map<int, std::string> _cache;
 public:
 	Distances(const Sites &sites, const Point2D<int> &q, ThreadPool *threads = NULL) : _sites(sites), _query(q) {}
+	Distances(const Sites &sites, const std::vector<int> &classes, const Point2D<int> &q, ThreadPool *threads = NULL) : _sites(sites), _classes(classes), _query(q) {}
 
 	unsigned int size() const { return _sites.size(); }
 	NumberBits operator[] (unsigned int at) {
-		return get(at);
+		return getDistances(at);
 	}
 
-	NumberBits get(unsigned int at, ThreadPool *threads = NULL) {
+	std::vector<int> getClasses(unsigned int at) {
+		return std::vector<int>(_classes.begin() + at, _classes.begin() + at + Number::simd_factor());
+	}
+
+	NumberBits getDistances(unsigned int at, ThreadPool *threads = NULL) {
 		std::string fname = _cache[at];
 		if (fname != std::string("")) {
 			std::ifstream f( fname );
@@ -122,7 +128,9 @@ public:
 
 		void operator+=(int a) { for (int i = 0; i < a; ++i) operator++(); }
 
-		NumberBits operator*() { return _db.get(_loc, _threads); }
+		std::vector<int> getClasses() { return _db.getClasses(_loc); }
+		NumberBits getDistances() { return _db.getDistances(_loc, _threads); }
+		NumberBits operator*() { return getDistances(); }
 	};
 
 

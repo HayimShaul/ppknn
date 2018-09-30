@@ -31,6 +31,11 @@ public:
 		return std::vector<int>(_classes.begin() + at, _classes.begin() + at + Number::simd_factor());
 	}
 
+	int getPlaintextDistance(int i) {
+		Point2D<int> dist = _query - _sites[i];
+		return abs(dist.x) + abs(dist.y);
+	}
+
 	NumberBits getDistances(unsigned int at, ThreadPool *threads = NULL) {
 		std::string fname = _cache[at];
 		if (fname != std::string("")) {

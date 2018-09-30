@@ -520,15 +520,17 @@ void secure_knn_classifier_gaussian(const std::vector<Point2D<int> > &sites, con
 				classOneCountEnc[i_candidate] += knnEnc * classOne;
 				classZeroCountEnc[i_candidate] += knnEnc * classZero;
 
-//				std::vector<long int> knn = knnEnc0.to_vector();
-//				for (auto ri = knn.begin(); ri != knn.end(); ++ri) {
-//					if (i < sites.size()) {
-//						if ((*ri != 0) && (*ri != 1))
-//							OK = false;
-//						std::cout << i << ") " << "x = " << *ri << std::endl;
-//						++i;
-//					}
-//				}
+				std::cout << "The KNN indicator vector for candidate " << thresholdCandidatesBits[i_candidate].to_int() << std::endl;
+				std::vector<long int> knn = knnEnc.to_vector();
+				unsigned int i = 0;
+				for (auto ri = knn.begin(); ri != knn.end(); ++ri) {
+					if (i < sites.size()) {
+						if ((*ri != 0) && (*ri != 1))
+							std::cout << "Error: ri = " << (*ri) << " which is not binary" << std::endl;
+						std::cout << i << ") " << "x = " << *ri << "   dist = " << distances.getPlaintextDistance(i) << "    class = " << classes[i] << std::endl;
+						++i;
+					}
+				}
 			}
 		}
 	}
@@ -699,14 +701,19 @@ int secure_knn_classifier(const std::vector<Point2D<int> > &sites, const std::ve
 				continue;
 			}
 			// Deal with the case where we have a small count of 1 but huge amount of 0
-			if (one < 0.05 * sites.size())
+			if (one < 0.05 * sites.size()) {
+				std::cout << "enough neighbors, and 1 count is very small. Classifying as 0" << std::endl;
 				return 0;
-			if (zero < 0.05 * sites.size())
+			}
+			if (zero < 0.05 * sites.size()) {
+				std::cout << "enough neighbors, and 0 count is very small. Classifying as 1" << std::endl;
 				return 1;
+			}
 			if (one + zero > 0.1 * sites.size()) {
-				std::cout << "Too much neighbors" << std::endl;
+				std::cout << "Too many neighbors" << std::endl;
 				continue;
 			}
+			std::cout << "enough neighbors. Classifying by majority" << std::endl;
 			return (one > zero) ? 1 : 0;
 		}
 	}

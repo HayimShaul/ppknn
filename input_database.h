@@ -31,7 +31,10 @@ public:
 		std::vector<long int> ret;
 		ret.resize(Number::simd_factor());
 		for (unsigned int i = 0; i < Number::simd_factor(); ++i)
-			ret[i] = (_classes[at + i] == cls) ? 1 : 0;
+			if ((_classes.size() > at + i) && (_classes[at + i] == cls))
+				ret[i] = 1;
+			else
+				ret[i] = 0;
 		return ret;
 	}
 

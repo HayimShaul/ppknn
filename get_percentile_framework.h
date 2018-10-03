@@ -502,34 +502,37 @@ void secure_knn_classifier_gaussian(const std::vector<Point2D<int> > &sites, con
 	auto dist = distances.begin();
 	while (dist != distances.end()) {
 		NumberBits xi = dist.getDistances();
-		std::vector<int> classes = dist.getClasses();
-		++dist;
+		std::vector<long int> classZero = dist.getClass(0);
+		std::vector<long int> classOne = dist.getClass(1);
 
-		// classOne and classZero are bitmaps with 1 for samples with 
-		std::vector<long int> classOne(classes.size());
-		std::vector<long int> classZero(classes.size());
-		for (unsigned int i_class = 0; i_class < classes.size(); ++i_class) {
-			classZero[i_class] = (classes[i_class] == 0) ? 1 : 0;
-			classOne[i_class] = (classes[i_class] == 1) ? 1 : 0;
-		}
+		++dist;
 
 		global_timer.start();
 		{
 			for (unsigned int i_candidate = 0; i_candidate < thresholdCandidatesBits.size(); ++i_candidate) {
 				Number knnEnc = xi < thresholdCandidatesBits[i_candidate];
-				classOneCountEnc[i_candidate] += knnEnc * classOne;
-				classZeroCountEnc[i_candidate] += knnEnc * classZero;
+				Number knnClassOneEnc = knnEnc * classOne;
+				Number knnClassZeroEnc = knnEnc * classZero;
+
+				classOneCountEnc[i_candidate] += knnClassOneEnc;
+				classZeroCountEnc[i_candidate] += knnClassZeroEnc;
 
 				std::cout << "The KNN indicator vector for candidate " << thresholdCandidatesBits[i_candidate].to_int() << std::endl;
 				std::vector<long int> knn = knnEnc.to_vector();
-				unsigned int i = 0;
-				for (auto ri = knn.begin(); ri != knn.end(); ++ri) {
-					if (i < sites.size()) {
-						if ((*ri != 0) && (*ri != 1))
-							std::cout << "Error: ri = " << (*ri) << " which is not binary" << std::endl;
-						std::cout << i << ") " << "x = " << *ri << "   dist = " << distances.getPlaintextDistance(i) << "    class = " << classes[i] << std::endl;
-						++i;
-					}
+				std::vector<long int> knnClassZero = knnClassZeroEnc.to_vector();
+				std::vector<long int> knnClassOne = knnClassOneEnc.to_vector();
+//				unsigned int i = 0;
+//				for (auto ri = knn.begin(); ri != knn.end(); ++ri) {
+//					if (i < sites.size()) {
+//						if ((*ri != 0) && (*ri != 1))
+//							std::cout << "Error: ri = " << (*ri) << " which is not binary" << std::endl;
+//						std::cout << i << ") " << "x = " << *ri << "   dist = " << distances.getPlaintextDistance(i) << "    class = " << classes[i] << std::endl;
+//						++i;
+//					}
+//				}
+				for (unsigned int i = 0; i < knn.size(); ++i) {
+					std::cout << i << ") " << "x = " << knn[i] << "   dist = " << distances.getPlaintextDistance(i) << "    class = " << classes[i]
+						<< " class zero: " << knnClassZero[i] <<  " class one: " << knnClassOne[i] << std::endl;
 				}
 			}
 		}
@@ -542,18 +545,30 @@ void secure_knn_classifier_gaussian(const std::vector<Point2D<int> > &sites, con
 //		std::cout << "test is ok" << std::endl;
 
 	
+	classZeroCountVector.resize(thresholdCandidatesBits.size());
+	classOneCountVector.resize(thresholdCandidatesBits.size());
 	for (unsigned int i_candidate = 0; i_candidate < thresholdCandidatesBits.size(); ++i_candidate) {
 		std::vector<long int> classOneCountV = classOneCountEnc[i_candidate].to_vector();
 		std::vector<long int> classZeroCountV = classZeroCountEnc[i_candidate].to_vector();
-		int classOneCount = 0;
-		for (int n : classOneCountV) classOneCount += n;
+
+		std::cout << "class zero neighbors:" << std::endl;
 		int classZeroCount = 0;
-		for (int n : classZeroCountV) classZeroCount += n;
+		for (unsigned int n = 0; n < classZeroCountV.size(); ++n) {
+			std::cout << classZeroCountV[n] << std::endl;
+			classZeroCount += classZeroCountV[n];
+		}
+
+		std::cout << "class one neighbors:" << std::endl;
+		int classOneCount = 0;
+		for (unsigned int n = 0; n < classOneCountV.size(); ++n) {
+			std::cout << classOneCountV[n] << std::endl;
+			classOneCount += classOneCountV[n];;
+		}
 
 		std::cout << "candidate " << i_candidate << " secure count of class 0: " << classZeroCount << std::endl;
 		std::cout << "candidate " << i_candidate << " secure count of class 1: " << classOneCount << std::endl;
-		classZeroCountVector.push_back(classZeroCount);
-		classOneCountVector.push_back(classOneCount);
+		classZeroCountVector[i_candidate] = classZeroCount;
+		classOneCountVector[i_candidate] = classOneCount;
 	}
 
 
@@ -618,16 +633,10 @@ int secure_knn_classifier_blackhole(const std::vector<Point2D<int> > &sites, con
 	auto dist = distances.begin();
 	while (dist != distances.end()) {
 		NumberBits xi = dist.getDistances();
-		std::vector<int> classes = dist.getClasses();
-		++dist;
+		std::vector<long int> classZero = dist.getClasses(0);
+		std::vector<long int> classOne = dist.getClasses(1);
 
-		// classOne and classZero are bitmaps with 1 for samples with 
-		std::vector<long int> classOne(classes.size());
-		std::vector<long int> classZero(classes.size());
-		for (unsigned int i_class = 0; i_class < classes.size(); ++i_class) {
-			classZero[i_class] = (classes[i_class] == 0) ? 1 : 0;
-			classOne[i_class] = (classes[i_class] == 1) ? 1 : 0;
-		}
+		++dist;
 
 		Number classOneEnc(classOne);
 		Number classZeroEnc(classZero);

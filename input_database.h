@@ -27,8 +27,12 @@ public:
 		return getDistances(at);
 	}
 
-	std::vector<int> getClasses(unsigned int at) {
-		return std::vector<int>(_classes.begin() + at, _classes.begin() + at + Number::simd_factor());
+	std::vector<long int> getClass(unsigned int at, int cls) {
+		std::vector<long int> ret;
+		ret.resize(Number::simd_factor());
+		for (unsigned int i = 0; i < Number::simd_factor(); ++i)
+			ret[i] = (_classes[at + i] == cls) ? 1 : 0;
+		return ret;
 	}
 
 	int getPlaintextDistance(int i) {
@@ -133,7 +137,7 @@ public:
 
 		void operator+=(int a) { for (int i = 0; i < a; ++i) operator++(); }
 
-		std::vector<int> getClasses() { return _db.getClasses(_loc); }
+		std::vector<long int> getClass(int cls) { return _db.getClass(_loc, cls); }
 		NumberBits getDistances() { return _db.getDistances(_loc, _threads); }
 		NumberBits operator*() { return getDistances(); }
 	};

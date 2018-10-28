@@ -306,6 +306,8 @@ int real_knn_classifier(const std::vector<Point2D<int> > &sites, const std::vect
 }
 
 
+bool OK = true;
+
 template<class Number, class NumberBits>
 void secure_knn_classifier_gaussian(const std::vector<Point2D<int> > &sites, const std::vector<int> &classes, const Point2D<int> &query, std::vector<int> &classZeroCountVector, std::vector<int> &classOneCountVector) {
 
@@ -327,9 +329,11 @@ void secure_knn_classifier_gaussian(const std::vector<Point2D<int> > &sites, con
 	Number avgSqrLsdEnc;
 
 	{
+		AutoTakeTimes tt("computing averages");
+
 		global_timer.start();
 		multithreaded_averages<Number, NumberBits>(distances, avgEnc, avgSqrMsdEnc, avgSqrLsdEnc);
-		std::cout << global_timer.end("computin averages");
+		std::cout << global_timer.end("computing averages");
 	}
 
 
@@ -412,7 +416,7 @@ void secure_knn_classifier_gaussian(const std::vector<Point2D<int> > &sites, con
 		}
 
 
-		std::cout << global_timer.end("compute threasholds");
+		std::cout << global_timer.end("compute threashold candidates");
 
 
 
@@ -427,16 +431,6 @@ void secure_knn_classifier_gaussian(const std::vector<Point2D<int> > &sites, con
 		}
 		realAvg /= sites.size();
 		realAvgSqr /= sites.size();
-
-//		std::cout << "real avg = " << realAvg << std::endl;
-//
-//		std::cout << "real avg^2 = " << (realAvg*realAvg) << std::endl;
-//		std::cout << "real avg^2 / p = " << (realAvg*realAvg / p) << std::endl;
-//		std::cout << "real avg^2 % p = " << (realAvg*realAvg % p) << std::endl;
-//
-//		std::cout << "real avgSqr = " << realAvgSqr << std::endl;
-//		std::cout << "real avgSqr / p = " << (realAvgSqr / p) << std::endl;
-//		std::cout << "real avgSqr % p = " << (realAvgSqr % p) << std::endl;
 
 		std::cout << "avg = " << avgEnc.to_int()  << "         (real = " << realAvg << ")" << std::endl;
 
@@ -461,11 +455,6 @@ void secure_knn_classifier_gaussian(const std::vector<Point2D<int> > &sites, con
 	////////////////////////////////////
 
 
-	print_stat(-1);
-	if (measureAccuracy) {
-		print_detailed_stats(-1, avgEnc, avgSqrMsdEnc, avgSqrLsdEnc);
-	}
-
 
 	////////////////////////////////////
 	// start counting classes
@@ -478,18 +467,8 @@ void secure_knn_classifier_gaussian(const std::vector<Point2D<int> > &sites, con
 			++dist;
 		}
 	}
-	
-	////////////////////////////////////
-	// end counting classes
-	////////////////////////////////////
 
 
-
-
-
-	////////////////////////////////////
-	// start reporting points
-	////////////////////////////////////
 
 	std::vector<Number> classOneCountEnc(thresholdCandidatesBits.size());
 	std::vector<Number> classZeroCountEnc(thresholdCandidatesBits.size());
@@ -507,44 +486,42 @@ void secure_knn_classifier_gaussian(const std::vector<Point2D<int> > &sites, con
 
 		++dist;
 
-		global_timer.start();
 		{
 			for (unsigned int i_candidate = 0; i_candidate < thresholdCandidatesBits.size(); ++i_candidate) {
+				global_timer.start();
+
 				Number knnEnc = xi < thresholdCandidatesBits[i_candidate];
 				Number knnClassOneEnc = knnEnc * classOne;
 				Number knnClassZeroEnc = knnEnc * classZero;
 
 				classOneCountEnc[i_candidate] += knnClassOneEnc;
 				classZeroCountEnc[i_candidate] += knnClassZeroEnc;
+				std::cout << global_timer.end("count classes for one candidate for one batch of points");
 
+				// debugging
 				std::cout << "The KNN indicator vector for candidate " << thresholdCandidatesBits[i_candidate].to_int() << std::endl;
 				std::vector<long int> knn = knnEnc.to_vector();
 				std::vector<long int> knnClassZero = knnClassZeroEnc.to_vector();
 				std::vector<long int> knnClassOne = knnClassOneEnc.to_vector();
-//				unsigned int i = 0;
-//				for (auto ri = knn.begin(); ri != knn.end(); ++ri) {
-//					if (i < sites.size()) {
-//						if ((*ri != 0) && (*ri != 1))
-//							std::cout << "Error: ri = " << (*ri) << " which is not binary" << std::endl;
-//						std::cout << i << ") " << "x = " << *ri << "   dist = " << distances.getPlaintextDistance(i) << "    class = " << classes[i] << std::endl;
-//						++i;
-//					}
-//				}
 				for (unsigned int i = 0; i < knn.size(); ++i) {
 					std::cout << i << ") " << "x = " << knn[i] << "   dist = " << distances.getPlaintextDistance(i) << "    class = " << classes[i]
 						<< " class zero: " << knnClassZero[i] <<  " class one: " << knnClassOne[i] << std::endl;
+					if ((knnClassZero[i] != 0) && (knnClassZero[i] != 1))
+						OK = false;
+					if ((knnClassOne[i] != 0) && (knnClassOne[i] != 1))
+						OK = false;
 				}
 			}
 		}
 	}
 
-	std::cout << global_timer.end("reporting points");
 //	std::cout << "depth = mul " << classOneCountEnc0.mul_depth() << " add " << classOneCountEnc0.add_depth() << std::endl;
 
-//	if (OK)
-//		std::cout << "test is ok" << std::endl;
+	if (!OK) {
+		std::cout << "test is wrong" << std::endl;
+		exit(1);
+	}
 
-	
 	classZeroCountVector.resize(thresholdCandidatesBits.size());
 	classOneCountVector.resize(thresholdCandidatesBits.size());
 	for (unsigned int i_candidate = 0; i_candidate < thresholdCandidatesBits.size(); ++i_candidate) {
@@ -574,118 +551,12 @@ void secure_knn_classifier_gaussian(const std::vector<Point2D<int> > &sites, con
 
 //	int secureKnnClassifier = (classZeroCount > classOneCount) ? 0 : 1;
 
-	////////////////////////////////////
-	// end reporting points
-	////////////////////////////////////
+
 
 	print_stat(-1);
-
 //	return secureKnnClassifier;
 }
 
-template<class Number, class NumberBits>
-int secure_knn_classifier_blackhole(const std::vector<Point2D<int> > &sites, const std::vector<int> &classes, const Point2D<int> &query, int &classZeroCount, int &classOneCount) {
-
-	std::cout << "Starting classifier blackhole" << std::endl;
-
-	Distances<Number, NumberBits> distances(sites, classes, query);
-	unsigned int i = 0;
-
-	Number avgValue;
-	Number avgSqrValue;
-
-	n = sites.size();
-
-
-	////////////////////////////////////
-	// start counting classes
-	////////////////////////////////////
-
-	{
-		auto dist = distances.begin();
-		while (dist != distances.end()) {
-			NumberBits xi = *dist;
-			++dist;
-		}
-	}
-	
-	////////////////////////////////////
-	// end counting classes
-	////////////////////////////////////
-
-
-	std::vector<long int> thres_vector;
-	for (unsigned int i_threshold = 0; i_threshold < Number::simd_factor(); ++i_threshold) 
-		thres_vector.push_back(1);
-
-
-	////////////////////////////////////
-	// start reporting points
-	////////////////////////////////////
-
-	bool OK = true;
-	i = 0;
-	Number classOneCountEnc(0);
-	Number classZeroCountEnc(0);
-
-	NumberBits thresholdBits(thres_vector);
-	
-	auto dist = distances.begin();
-	while (dist != distances.end()) {
-		NumberBits xi = dist.getDistances();
-		std::vector<long int> classZero = dist.getClasses(0);
-		std::vector<long int> classOne = dist.getClasses(1);
-
-		++dist;
-
-		Number classOneEnc(classOne);
-		Number classZeroEnc(classZero);
-
-		global_timer.start();
-		Number knnEnc = xi < thresholdBits;
-		classOneCountEnc += knnEnc * classOneEnc;
-		classZeroCountEnc += knnEnc * classZeroEnc;
-		std::cout << global_timer.end("reporting points");
-
-		std::cout << "depth = mul " << classOneCountEnc.mul_depth() << " add " << classOneCountEnc.add_depth() << std::endl;
-
-		std::vector<long int> knn = knnEnc.to_vector();
-		for (auto ri = knn.begin(); ri != knn.end(); ++ri) {
-			if (i < sites.size()) {
-				if ((*ri != 0) && (*ri != 1))
-					OK = false;
-				std::cout << i << ") " << "x = " << *ri << std::endl;
-				++i;
-			}
-
-
-		}
-	}
-
-	if (OK)
-		std::cout << "test is ok" << std::endl;
-
-	std::vector<long int> classOneCountVector = classOneCountEnc.to_vector();
-	std::vector<long int> classZeroCountVector = classZeroCountEnc.to_vector();
-	classOneCount = 0;
-	for (int n : classOneCountVector) classOneCount += n;
-	classZeroCount = 0;
-	for (int n : classZeroCountVector) classZeroCount += n;
-
-	std::cout << "secure count of class 0 (blackhole): " << classZeroCount << std::endl;
-	std::cout << "secure count of class 1 (blackhole): " << classOneCount << std::endl;
-
-
-	int secureKnnClassifier = (classZeroCount > classOneCount) ? 0 : 1;
-
-	////////////////////////////////////
-	// end reporting points
-	////////////////////////////////////
-
-	print_stat(-1);
-
-	return secureKnnClassifier;
-}
 
 int avgIterations = 0;
 
@@ -726,14 +597,6 @@ int secure_knn_classifier(const std::vector<Point2D<int> > &sites, const std::ve
 			return (one > zero) ? 1 : 0;
 		}
 	}
-	std::cout << "ITERATIONS: did not get a small neighborhood - trying blackhole" << std::endl;
-
-//	ret = secure_knn_classifier_blackhole<Number, NumberBits>(sites, classes, query, classZeroCount, classOneCount);
-//	if (((classZeroCount + classOneCount) < sites.size() * 0.04) ||
-//			((classZeroCount > sites.size() * 0.1) && (classOneCount > sites.size() * 0.1))) {
-//		std::cout << "ITERATIONS: blackhole failed to find a good neighborhood: zero=" << classZeroCount << " one=" << classOneCount << std::endl;
-//		return -1;
-//	}
 
 	return -1;
 }
@@ -763,6 +626,8 @@ void test_secure_knn_classifier(const std::vector<Point2D<int> > &sites, const s
 
 		int secKnnClass = secure_knn_classifier<Number, NumberBits>(sub_sites, classes, sites[i_query]);
 		int realKnnClass = real_knn_classifier(sub_sites, sub_classes, sites[i_query]);
+
+		std::cout << "test is OK";
 
 		std::cout << "Secure KNN classifier classified as: " << secKnnClass << std::endl;
 		std::cout << "Original KNN classifier classified as: " << realKnnClass << std::endl;

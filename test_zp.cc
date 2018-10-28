@@ -30,6 +30,8 @@ template<class Number>
 std::vector<Polynomial<Number> > SpecialPolynomials<Number>::convert_to_bit;
 
 int main(int argc, char **argv) {
+	srand(time(NULL));
+
 	initialize(argc, argv);
 	MyZP::set_global_p(p, r);
 

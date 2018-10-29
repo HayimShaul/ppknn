@@ -576,20 +576,22 @@ int secure_knn_classifier(const std::vector<Point2D<int> > &sites, const std::ve
 			int zero = classZeroCount[sigmaFactor];
 			std::cout << "Iteration " << i << " sigmaFactor " << sigmaFactor << " one=" << one << "  zero=" << zero << std::endl;
 
-			if (one + zero < 0.02 * sites.size()) {
+			float threshold = 0.05 * sites.size();
+
+			if (one + zero < 0.5 * threshold) {
 				std::cout << "Too little neighbors" << std::endl;
 				continue;
 			}
 			// Deal with the case where we have a small count of 1 but huge amount of 0
-			if (one < 0.05 * sites.size()) {
-				std::cout << "enough neighbors, and 1 count is very small. Classifying as 0" << std::endl;
-				return 0;
-			}
-			if (zero < 0.05 * sites.size()) {
-				std::cout << "enough neighbors, and 0 count is very small. Classifying as 1" << std::endl;
-				return 1;
-			}
-			if (one + zero > 0.1 * sites.size()) {
+			if (one + zero > 2 * threshold) {
+				if (one < threshold) {
+					std::cout << "enough neighbors, and 1 count is very small. Classifying as 0" << std::endl;
+					return 0;
+				}
+				if (zero < threshold) {
+					std::cout << "enough neighbors, and 0 count is very small. Classifying as 1" << std::endl;
+					return 1;
+				}
 				std::cout << "Too many neighbors" << std::endl;
 				continue;
 			}

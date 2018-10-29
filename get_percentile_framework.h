@@ -503,7 +503,7 @@ void secure_knn_classifier_gaussian(const std::vector<Point2D<int> > &sites, con
 				std::vector<long int> knn = knnEnc.to_vector();
 				std::vector<long int> knnClassZero = knnClassZeroEnc.to_vector();
 				std::vector<long int> knnClassOne = knnClassOneEnc.to_vector();
-				for (unsigned int i = 0; i < knn.size(); ++i) {
+				for (unsigned int i = 0; (i < knn.size()) && (i < sites.size()); ++i) {
 					std::cout << i << ") " << "x = " << knn[i] << "   dist = " << distances.getPlaintextDistance(i) << "    class = " << classes[i]
 						<< " class zero: " << knnClassZero[i] <<  " class one: " << knnClassOne[i] << std::endl;
 					if ((knnClassZero[i] != 0) && (knnClassZero[i] != 1))

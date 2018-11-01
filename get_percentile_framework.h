@@ -9,6 +9,8 @@
 
 #include <time_measurements.h>
 
+#define DONT_USE_SIMD
+
 #include "polynomial.h"
 #include "get_percentile.h"
 #include "special_polynomials.h"
@@ -16,6 +18,7 @@
 
 
 TakeTimes global_timer;
+
 
 
 void print_stat_prefix(int i) {
@@ -78,6 +81,10 @@ unsigned int statistic_rate = 10;
 
 template<class Number>
 Number fold(Number n) {
+#	ifdef DONT_USE_SIMD
+	return n;
+#	endif
+
 	AddBinomialTournament<Number> ret;
 
 	int end = n.simd_factor();
@@ -97,6 +104,54 @@ Number fold(Number n) {
 
 	return ret.unite_all();
 }
+
+int popcnt(int i) {
+	i = ((i >> 1) & 0x5555) + (i & 0x5555);
+	i = ((i >> 2) & 0x3333) + (i & 0x3333);
+	i = ((i >> 4) & 0x0f0f) + (i & 0x0f0f);
+	i = ((i >> 8) & 0x00ff) + (i & 0x00ff);
+	return i;
+}
+
+//template<class Number>
+//Number fold_power_2(Number n, int simd_factor) {
+//#	ifdef DONT_USE_SIMD
+//	return n;
+//#	endif
+//
+//	assert(popcnt(simd_factor) == 1);
+//
+//	Number ret;
+//
+//	Number *a = &n;
+//	Number *b = &ret;
+//
+//	int iter = simd_factor;
+//	while (iter > 1) {
+//		std::vector<long int> mask_left;
+//		std::vector<long int> mask_right;
+//
+//		for (int i = 0; i < simd_factor; ++i) {
+//			if ((i / (iter/2)) & 1) {
+//				mask_left[i] = 0;
+//				mask_rightt[i] = 1;
+//			} else
+//				mask_left[i] = 1;
+//				mask_rightt[i] = 0;
+//			}
+//		}
+//
+//		*b = (a->shift_left(iter/2) * Number::from_vector(mask_right)) + (a->shift_right(iter/2) * Number::from_vector(mask_left));
+//
+//		iter /= 2;
+//
+//		Number *temp = a;
+//		a = b;
+//		b = temp;
+//	}
+//
+//	return *b;
+//}
 
 template<class Number, class NumberBits>
 void multithreaded_average(Distances<Number, NumberBits> &_x, std::function<int(int)> f_m, Number &output) {
@@ -119,7 +174,11 @@ void multithreaded_average(Distances<Number, NumberBits> &_x, std::function<int(
 
 			while (input != _x.end()) {
 				NumberBits xi = *input;
+#				ifdef USE_SIMD
 				avg.add_simd(xi, &mutex);
+#				else
+				avg.add(xi, &mutex);
+#				endif
 
 				++input;
 			}
@@ -484,8 +543,6 @@ void secure_knn_classifier_gaussian(const std::vector<Point2D<int> > &sites, con
 		std::vector<long int> classZero = dist.getClass(0);
 		std::vector<long int> classOne = dist.getClass(1);
 
-		++dist;
-
 		{
 			for (unsigned int i_candidate = 0; i_candidate < thresholdCandidatesBits.size(); ++i_candidate) {
 				global_timer.start();
@@ -503,8 +560,10 @@ void secure_knn_classifier_gaussian(const std::vector<Point2D<int> > &sites, con
 				std::vector<long int> knn = knnEnc.to_vector();
 				std::vector<long int> knnClassZero = knnClassZeroEnc.to_vector();
 				std::vector<long int> knnClassOne = knnClassOneEnc.to_vector();
+				std::vector<long int> plaintextDistances = dist.getPlaintextDistances();
+				std::vector<long int> plaintextClasses = dist.getPlaintextClasses();
 				for (unsigned int i = 0; (i < knn.size()) && (i < sites.size()); ++i) {
-					std::cout << i << ") " << "x = " << knn[i] << "   dist = " << distances.getPlaintextDistance(i) << "    class = " << classes[i]
+					std::cout << dist.loc() << ", " << i << ") " << "x = " << knn[i] << "   dist = " << plaintextDistances[i] << "    class = " << plaintextClasses[i]
 						<< " class zero: " << knnClassZero[i] <<  " class one: " << knnClassOne[i] << std::endl;
 					if ((knnClassZero[i] != 0) && (knnClassZero[i] != 1))
 						OK = false;
@@ -513,6 +572,8 @@ void secure_knn_classifier_gaussian(const std::vector<Point2D<int> > &sites, con
 				}
 			}
 		}
+
+		++dist;
 	}
 
 //	std::cout << "depth = mul " << classOneCountEnc0.mul_depth() << " add " << classOneCountEnc0.add_depth() << std::endl;

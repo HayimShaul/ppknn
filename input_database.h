@@ -18,6 +18,17 @@ private:
 	const std::vector<int> _classes;
 	Point2D<int> _query;
 	std::map<int, std::string> _cache;
+
+	static unsigned int simd_factor() {
+#		ifdef USE_SIMD
+		return Number::simd_factor();
+#		elif defined DONT_USE_SIMD
+		return 1;
+#		else
+#		error "must define either USE_SIMD or DONT_USE_SIMD"
+#		endif
+	}
+
 public:
 	Distances(const Sites &sites, const Point2D<int> &q, ThreadPool *threads = NULL) : _sites(sites), _query(q) {}
 	Distances(const Sites &sites, const std::vector<int> &classes, const Point2D<int> &q, ThreadPool *threads = NULL) : _sites(sites), _classes(classes), _query(q) {}
@@ -31,17 +42,36 @@ public:
 		std::vector<long int> ret;
 		ret.resize(Number::simd_factor());
 		for (unsigned int i = 0; i < Number::simd_factor(); ++i)
-			if ((_classes.size() > at + i) && (_classes[at + i] == cls))
+			if ((i < simd_factor()) && (_classes.size() > at + i) && (_classes[at + i] == cls))
 				ret[i] = 1;
 			else
 				ret[i] = 0;
 		return ret;
 	}
 
-	int getPlaintextDistance(int i) {
-		Point2D<int> dist = _query - _sites[i];
-		return abs(dist.x) + abs(dist.y);
+	std::vector<long int> getPlaintextClasses(unsigned int at) {
+		std::vector<long int> ret;
+		ret.resize(Number::simd_factor());
+		for (unsigned int i = 0; i < Number::simd_factor(); ++i)
+			if ((i < simd_factor()) && (_classes.size() > at + i))
+				ret[i] = _classes[at + i];
+			else
+				ret[i] = 0;
+		return ret;
 	}
+
+	std::vector<long int> getPlaintextDistances(int at) {
+		std::vector<long int> ret;
+		ret.resize(Number::simd_factor());
+		for (unsigned int i = 0; i < Number::simd_factor(); ++i)
+			if ((i < simd_factor()) && (_sites.size() > at + i)) {
+				Point2D<int> dist = _query - _sites[at + i];
+				ret[i] = abs(dist.x) + abs(dist.y);
+			} else
+				ret[i] = 0;
+		return ret;
+	}
+
 
 	NumberBits getDistances(unsigned int at, ThreadPool *threads = NULL) {
 		std::string fname = _cache[at];
@@ -59,7 +89,7 @@ public:
 		std::vector<long int> yQuery(Number::simd_factor());
 
 		unsigned int i = 0;
-		while ((i < Number::simd_factor()) && (i + at < _sites.size())) {
+		while ((i < simd_factor()) && (i + at < _sites.size())) {
 			xSite[i] = _sites[i + at].x;
 			ySite[i] = _sites[i + at].y;
 			xQuery[i] = _query.x;
@@ -103,12 +133,14 @@ public:
 		NumberBits retBits;
 		convert_to_bits<NumberBits, Number>(retBits, ret, threads);
 
+#		ifdef CACHE_CTEXT
 		std::stringstream sfname;
 		sfname << cache_prefix << at << ".ctxt";
 
 		_cache[at] = sfname.str();
 		ofstream f(sfname.str());
 		f << retBits;
+#		endif
 
 		return retBits;
 	}
@@ -130,7 +162,7 @@ public:
 		void operator++() {
 			if (_loc == _db.size())
 				return;
-			for (unsigned int i = 0; i < Number::simd_factor(); ++i) {
+			for (unsigned int i = 0; i < simd_factor(); ++i) {
 				++_loc;
 				if (_loc == _db.size())
 					return;
@@ -143,6 +175,11 @@ public:
 		std::vector<long int> getClass(int cls) { return _db.getClass(_loc, cls); }
 		NumberBits getDistances() { return _db.getDistances(_loc, _threads); }
 		NumberBits operator*() { return getDistances(); }
+
+		std::vector<long int> getPlaintextDistances() { return _db.getPlaintextDistances(_loc); }
+		std::vector<long int> getPlaintextClasses() { return _db.getPlaintextClasses(_loc); }
+
+		unsigned int loc() const { return _loc; }
 	};
 
 

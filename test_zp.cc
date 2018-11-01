@@ -13,7 +13,7 @@
 #include "get_percentile.h"
 #include "special_polynomials.h"
 
-#define SIMD_FACTOR 600
+#define SIMD_FACTOR 6
 typedef ZP<SIMD_FACTOR> MyZP;
 typedef UnsignedWord<18, MyZP> MyZPBits;
 

@@ -320,7 +320,7 @@ void initialize(int argc, char **argv) {
 		++bucket;
 	}
 
-	p = Primes::find_prime_bigger_than(maxX + maxY);
+	p = Primes::find_prime_bigger_than(2*(maxX + maxY));
 
 //	p = 2;
 	r = 1;

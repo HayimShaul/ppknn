@@ -81,10 +81,7 @@ unsigned int statistic_rate = 10;
 
 template<class Number>
 Number fold(Number n) {
-#	ifdef DONT_USE_SIMD
-	return n;
-#	endif
-
+#ifdef RECURSIVE_FOLDING
 	AddBinomialTournament<Number> ret;
 
 	int end = n.simd_factor();
@@ -103,6 +100,21 @@ Number fold(Number n) {
 	}
 
 	return ret.unite_all();
+#else
+	Number ret = n;
+
+	if (n.simd_factor() < 569*2) {
+		for (unsigned int i = 1; i < n.simd_factor(); ++i)
+			ret += n.rotate_left(i);
+	} else {
+		for (unsigned int i = 1; i < n.simd_factor(); ++i) {
+			ret += n.shift_left(i);
+			ret += n.shift_right(i);
+		}
+	}
+
+	return ret;
+#endif
 }
 
 int popcnt(int i) {
@@ -156,7 +168,7 @@ int popcnt(int i) {
 template<class Number, class NumberBits>
 void multithreaded_average(Distances<Number, NumberBits> &_x, std::function<int(int)> f_m, Number &output) {
 	std::thread *thread = new std::thread[thread_num];
-	AverageLiphe<Number, NumberBits, CompareNative<NumberBits>, TruncConversion> avg;
+	AverageLiphe<Number, Number, ComparePoly<Number>, NoConversion<Number>> avg;
 	std::mutex mutex;
 
 	avg.set_n(_x.size());
@@ -197,9 +209,9 @@ void multithreaded_average(Distances<Number, NumberBits> &_x, std::function<int(
 template<class Number, class NumberBits>
 void multithreaded_averages(Distances<Number, NumberBits> &_x, Number &avg, Number &sqrMsd, Number &sqrLsd) {
 	std::thread *thread = new std::thread[thread_num];
-	AverageLiphe<Number, NumberBits, CompareNative<NumberBits>, TruncConversion> avgAvg;
-	AverageLiphe<Number, NumberBits, CompareNative<NumberBits>, TruncConversion> avgAvgSqrMsd;
-	AverageLiphe<Number, NumberBits, CompareNative<NumberBits>, TruncConversion> avgAvgSqrLsd;
+	AverageLiphe<Number, Number, ComparePoly<Number>, NoConversion<Number> > avgAvg;
+	AverageLiphe<Number, Number, ComparePoly<Number>, NoConversion<Number> > avgAvgSqrMsd;
+	AverageLiphe<Number, Number, ComparePoly<Number>, NoConversion<Number> > avgAvgSqrLsd;
 
 	std::mutex mutexAvg;
 	std::mutex mutexAvgSqrMsd;
@@ -249,7 +261,7 @@ void multithreaded_averages(Distances<Number, NumberBits> &_x, Number &avg, Numb
 			while (!threads.has_free_cpu())
 			threads.process_jobs(1);
 
-			std::shared_ptr<NumberBits> xi(new NumberBits(*input));
+			std::shared_ptr<Number> xi(new Number(*input));
 
 			avgAvg.add_simd(xi, &mutexAvg, &threads);
 			avgAvgSqrMsd.add_simd(xi, &mutexAvgSqrMsd, &threads);
@@ -417,7 +429,7 @@ void secure_knn_classifier_gaussian(const std::vector<Point2D<int> > &sites, con
 	// start computing threshold
 	////////////////////////////////////
 
-	std::vector<NumberBits> thresholdCandidatesBits;
+	std::vector<NumberBits> thresholdCandidates;
 	{
 		ThreadPool threads;
 
@@ -441,7 +453,6 @@ void secure_knn_classifier_gaussian(const std::vector<Point2D<int> > &sites, con
 		std::cout << "2^{-1} mod " << Number::get_global_ring_size() << " = " << inv2 << std::endl;
 
 		{
-			std::vector<Number> thresholdCandidates;
 			{
 				Number threshold = avgEnc;
 				thresholdCandidates.push_back(threshold);
@@ -463,15 +474,6 @@ void secure_knn_classifier_gaussian(const std::vector<Point2D<int> > &sites, con
 				thresholdCandidates.push_back(threshold);
 			}
 
-			{
-				AutoTakeTimes tt("converting threshold to bits");
-				thresholdCandidatesBits.resize(thresholdCandidates.size());
-
-				for (unsigned int i_candidate = 0; i_candidate < thresholdCandidates.size(); ++i_candidate) {
-					convert_to_bits<NumberBits, Number>(thresholdCandidatesBits[i_candidate], thresholdCandidates[i_candidate], &threads);
-				}
-				threads.process_jobs();
-			}
 		}
 
 
@@ -504,8 +506,8 @@ void secure_knn_classifier_gaussian(const std::vector<Point2D<int> > &sites, con
 
 		std::cout << "sigma = sqrt_msd(" << (avgSqrMsdEnc - avgMsdEnc).to_int() << ") + " << "sqrt_lsd(" << (avgSqrLsdEnc - avgLsdEnc).to_int() << ")" << std::endl;
 		std::cout << "sigma = " << sigma.to_int() << "            (real = " << ::sqrt(-realAvg*realAvg + realAvgSqr) << ")" << std::endl;
-		for (unsigned int i_candidate = 0; i_candidate < thresholdCandidatesBits.size(); ++i_candidate)
-			std::cout << "Threshold candidate " << i_candidate << " = " << thresholdCandidatesBits[i_candidate].to_int() << std::endl;
+		for (unsigned int i_candidate = 0; i_candidate < thresholdCandidates.size(); ++i_candidate)
+			std::cout << "Threshold candidate " << i_candidate << " = " << thresholdCandidates[i_candidate].to_int() << std::endl;
 
 	}
 
@@ -529,10 +531,10 @@ void secure_knn_classifier_gaussian(const std::vector<Point2D<int> > &sites, con
 
 
 
-	std::vector<Number> classOneCountEnc(thresholdCandidatesBits.size());
-	std::vector<Number> classZeroCountEnc(thresholdCandidatesBits.size());
+	std::vector<Number> classOneCountEnc(thresholdCandidates.size());
+	std::vector<Number> classZeroCountEnc(thresholdCandidates.size());
 
-	for (unsigned int i_candidate = 0; i_candidate < thresholdCandidatesBits.size(); ++i_candidate) {
+	for (unsigned int i_candidate = 0; i_candidate < thresholdCandidates.size(); ++i_candidate) {
 		classOneCountEnc[i_candidate] = 0;
 		classZeroCountEnc[i_candidate] = 0;
 	}
@@ -544,10 +546,10 @@ void secure_knn_classifier_gaussian(const std::vector<Point2D<int> > &sites, con
 		std::vector<long int> classOne = dist.getClass(1);
 
 		{
-			for (unsigned int i_candidate = 0; i_candidate < thresholdCandidatesBits.size(); ++i_candidate) {
+			for (unsigned int i_candidate = 0; i_candidate < thresholdCandidates.size(); ++i_candidate) {
 				global_timer.start();
 
-				Number knnEnc = xi < thresholdCandidatesBits[i_candidate];
+				Number knnEnc = xi < thresholdCandidates[i_candidate];
 				Number knnClassOneEnc = knnEnc * classOne;
 				Number knnClassZeroEnc = knnEnc * classZero;
 
@@ -556,7 +558,7 @@ void secure_knn_classifier_gaussian(const std::vector<Point2D<int> > &sites, con
 				std::cout << global_timer.end("count classes for one candidate for one batch of points");
 
 				// debugging
-				std::cout << "The KNN indicator vector for candidate " << thresholdCandidatesBits[i_candidate].to_int() << std::endl;
+				std::cout << "The KNN indicator vector for candidate " << thresholdCandidates[i_candidate].to_int() << std::endl;
 				std::vector<long int> knn = knnEnc.to_vector();
 				std::vector<long int> knnClassZero = knnClassZeroEnc.to_vector();
 				std::vector<long int> knnClassOne = knnClassOneEnc.to_vector();
@@ -583,9 +585,9 @@ void secure_knn_classifier_gaussian(const std::vector<Point2D<int> > &sites, con
 		exit(1);
 	}
 
-	classZeroCountVector.resize(thresholdCandidatesBits.size());
-	classOneCountVector.resize(thresholdCandidatesBits.size());
-	for (unsigned int i_candidate = 0; i_candidate < thresholdCandidatesBits.size(); ++i_candidate) {
+	classZeroCountVector.resize(thresholdCandidates.size());
+	classOneCountVector.resize(thresholdCandidates.size());
+	for (unsigned int i_candidate = 0; i_candidate < thresholdCandidates.size(); ++i_candidate) {
 		std::vector<long int> classOneCountV = classOneCountEnc[i_candidate].to_vector();
 		std::vector<long int> classZeroCountV = classZeroCountEnc[i_candidate].to_vector();
 

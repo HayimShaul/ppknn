@@ -1,13 +1,13 @@
 CCFLAGS = -g --std=c++11 -Wall
 
-NTLINCDIR = -I../ntl-10.5.0-multithread/include
-NTLLIBDIR = ../ntl-10.5.0-multithread/src
+NTLINCDIR = -I../../ntl-10.5.0-multithread/include
+NTLLIBDIR = ../../ntl-10.5.0-multithread/src
 
-FHEINCDIR = -I../HElib-multithread/src
-FHELIBDIR = -L../HElib-multithread/src
+FHEINCDIR = -I../../HElib-multithread/src
+FHELIBDIR = -L../../HElib-multithread/src
 
-HEADSUPINCDIR = -I../liphe/include
-HEADSUPLIBDIR = -L../liphe/src
+HEADSUPINCDIR = -I../../liphe/include
+HEADSUPLIBDIR = -L../../liphe/src
 
 JSONDIR = -I/home/hayim/lib/json/src -I../json/src
 

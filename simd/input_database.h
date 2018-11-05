@@ -34,7 +34,7 @@ public:
 	Distances(const Sites &sites, const std::vector<int> &classes, const Point2D<int> &q, ThreadPool *threads = NULL) : _sites(sites), _classes(classes), _query(q) {}
 
 	unsigned int size() const { return _sites.size(); }
-	NumberBits operator[] (unsigned int at) {
+	Number operator[] (unsigned int at) {
 		return getDistances(at);
 	}
 
@@ -73,11 +73,11 @@ public:
 	}
 
 
-	NumberBits getDistances(unsigned int at, ThreadPool *threads = NULL) {
+	Number getDistances(unsigned int at, ThreadPool *threads = NULL) {
 		std::string fname = _cache[at];
 		if (fname != std::string("")) {
 			std::ifstream f( fname );
-			NumberBits ret;
+			Number ret;
 			f >> ret;
 			return ret;
 		}
@@ -130,8 +130,8 @@ public:
 
 
 
-		NumberBits retBits;
-		convert_to_bits<NumberBits, Number>(retBits, ret, threads);
+//		NumberBits retBits;
+//		convert_to_bits<NumberBits, Number>(retBits, ret, threads);
 
 #		ifdef CACHE_CTEXT
 		std::stringstream sfname;
@@ -139,10 +139,10 @@ public:
 
 		_cache[at] = sfname.str();
 		ofstream f(sfname.str());
-		f << retBits;
+		f << ret;
 #		endif
 
-		return retBits;
+		return ret;
 	}
 
 	class Iterator {
@@ -173,8 +173,8 @@ public:
 		void operator+=(int a) { for (int i = 0; i < a; ++i) operator++(); }
 
 		std::vector<long int> getClass(int cls) { return _db.getClass(_loc, cls); }
-		NumberBits getDistances() { return _db.getDistances(_loc, _threads); }
-		NumberBits operator*() { return getDistances(); }
+		Number getDistances() { return _db.getDistances(_loc, _threads); }
+		Number operator*() { return getDistances(); }
 
 		std::vector<long int> getPlaintextDistances() { return _db.getPlaintextDistances(_loc); }
 		std::vector<long int> getPlaintextClasses() { return _db.getPlaintextClasses(_loc); }

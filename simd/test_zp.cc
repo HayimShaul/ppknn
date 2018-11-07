@@ -13,7 +13,7 @@
 #include "get_percentile.h"
 #include "special_polynomials.h"
 
-#define SIMD_FACTOR 6
+#define SIMD_FACTOR 600
 typedef ZP<SIMD_FACTOR> MyZP;
 typedef UnsignedWord<18, MyZP> MyZPBits;
 
@@ -38,7 +38,9 @@ int main(int argc, char **argv) {
 	SpecialPolynomials<MyZP>::init_polynomials(p);
 
 //	secure_geo_search<MyZP, MyZPBits>(rawDiscreteData, discreteQuery);
+
 //	secure_knn_classifier<MyZP, MyZPBits>(rawDiscreteData, rawDataClasses, discreteQuery);
+
 	test_secure_knn_classifier<MyZP, MyZPBits>(rawDiscreteData, rawDataClasses);
 	return 0;
 }

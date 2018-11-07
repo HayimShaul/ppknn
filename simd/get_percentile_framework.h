@@ -80,7 +80,10 @@ unsigned int statistic_rate = 10;
 
 
 template<class Number>
-Number fold(Number n) {
+Number fold(Number n, unsigned int count) {
+	if (count == 0)
+		count = n.simd_factor();
+ 
 #ifdef RECURSIVE_FOLDING
 	AddBinomialTournament<Number> ret;
 
@@ -103,15 +106,41 @@ Number fold(Number n) {
 #else
 	Number ret = n;
 
-	if (n.simd_factor() < 569*2) {
-		for (unsigned int i = 1; i < n.simd_factor(); ++i)
-			ret += n.rotate_left(i);
-	} else {
+	ThreadPool threads;
+	std::mutex access_ret;
+
+	if (n.simd_factor() < count*2) {
 		for (unsigned int i = 1; i < n.simd_factor(); ++i) {
-			ret += n.shift_left(i);
-			ret += n.shift_right(i);
+			while (!threads.has_free_cpu())
+				threads.process_jobs(1);
+
+			threads.submit_job(std::function<void(void)>([&n, &ret, &access_ret, i](){
+				Number a = n.rotate_left(i);
+				access_ret.lock();
+				ret += a;
+				access_ret.unlock();
+			}));
+		}
+	} else {
+		for (unsigned int i = 1; i < count; ++i) {
+			while (!threads.has_free_cpu())
+				threads.process_jobs(1);
+
+			threads.submit_job(std::function<void(void)>([&n, &ret, &access_ret, i](){
+				Number a = n.shift_left(i);
+				access_ret.lock();
+				ret += a;
+				access_ret.unlock();
+
+				a = n.shift_right(i);
+				access_ret.lock();
+				ret += a;
+				access_ret.unlock();
+			}));
 		}
 	}
+
+	threads.process_jobs();
 
 	return ret;
 #endif
@@ -208,7 +237,6 @@ void multithreaded_average(Distances<Number, NumberBits> &_x, std::function<int(
 
 template<class Number, class NumberBits>
 void multithreaded_averages(Distances<Number, NumberBits> &_x, Number &avg, Number &sqrMsd, Number &sqrLsd) {
-	std::thread *thread = new std::thread[thread_num];
 	AverageLiphe<Number, Number, ComparePoly<Number>, NoConversion<Number> > avgAvg;
 	AverageLiphe<Number, Number, ComparePoly<Number>, NoConversion<Number> > avgAvgSqrMsd;
 	AverageLiphe<Number, Number, ComparePoly<Number>, NoConversion<Number> > avgAvgSqrLsd;
@@ -280,8 +308,6 @@ void multithreaded_averages(Distances<Number, NumberBits> &_x, Number &avg, Numb
 		sqrMsd = avgAvgSqrMsd.getAverage();
 		sqrLsd = avgAvgSqrLsd.getAverage();
 	}
-
-	delete[] thread;
 }
 
 
@@ -389,8 +415,6 @@ void secure_knn_classifier_gaussian(const std::vector<Point2D<int> > &sites, con
 	Number avgValue;
 	Number avgSqrValue;
 
-	n = sites.size();
-
 	////////////////////////////////////
 	// Start computing average and average of squares
 	////////////////////////////////////
@@ -412,9 +436,9 @@ void secure_knn_classifier_gaussian(const std::vector<Point2D<int> > &sites, con
 		AutoTakeTimes tt("folding vectors");
 
 		global_timer.start();
-		avgEnc = fold(avgEnc);
-		avgSqrMsdEnc = fold(avgSqrMsdEnc);
-		avgSqrLsdEnc = fold(avgSqrLsdEnc);
+		avgEnc = fold(avgEnc, sites.size());
+		avgSqrMsdEnc = fold(avgSqrMsdEnc, sites.size());
+		avgSqrLsdEnc = fold(avgSqrLsdEnc, sites.size());
 		std::cout << global_timer.end("folding");
 	}
 
@@ -429,7 +453,7 @@ void secure_knn_classifier_gaussian(const std::vector<Point2D<int> > &sites, con
 	// start computing threshold
 	////////////////////////////////////
 
-	std::vector<NumberBits> thresholdCandidates;
+	std::vector<Number> thresholdCandidates;
 	{
 		ThreadPool threads;
 
@@ -521,15 +545,6 @@ void secure_knn_classifier_gaussian(const std::vector<Point2D<int> > &sites, con
 	// start counting classes
 	////////////////////////////////////
 
-	{
-		auto dist = distances.begin();
-		while (dist != distances.end()) {
-			NumberBits xi = *dist;
-			++dist;
-		}
-	}
-
-
 
 	std::vector<Number> classOneCountEnc(thresholdCandidates.size());
 	std::vector<Number> classZeroCountEnc(thresholdCandidates.size());
@@ -541,7 +556,7 @@ void secure_knn_classifier_gaussian(const std::vector<Point2D<int> > &sites, con
 
 	auto dist = distances.begin();
 	while (dist != distances.end()) {
-		NumberBits xi = dist.getDistances();
+		Number xi = dist.getDistances();
 		std::vector<long int> classZero = dist.getClass(0);
 		std::vector<long int> classOne = dist.getClass(1);
 
@@ -549,7 +564,7 @@ void secure_knn_classifier_gaussian(const std::vector<Point2D<int> > &sites, con
 			for (unsigned int i_candidate = 0; i_candidate < thresholdCandidates.size(); ++i_candidate) {
 				global_timer.start();
 
-				Number knnEnc = xi < thresholdCandidates[i_candidate];
+				Number knnEnc = ComparePoly<Number>(xi) < thresholdCandidates[i_candidate];
 				Number knnClassOneEnc = knnEnc * classOne;
 				Number knnClassZeroEnc = knnEnc * classZero;
 

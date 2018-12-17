@@ -1,18 +1,18 @@
-CCFLAGS = -g --std=c++11 -Wall
+CCFLAGS = -g --std=c++11 -Wall -O3
 
-NTLINCDIR = -I../../ntl-10.5.0-multithread/include
+NTLINCDIR = ../../ntl-10.5.0-multithread/include
 NTLLIBDIR = ../../ntl-10.5.0-multithread/src
 
-FHEINCDIR = -I../../HElib-multithread/src
+FHEINCDIR = ../../HElib-multithread/src
 FHELIBDIR = ../../HElib-multithread/src
 
-HEADSUPINCDIR = -I../../liphe/include
-HEADSUPLIBDIR = -L../../liphe/src
+LIPHEINCDIR = ../../liphe/include
+LIPHELIBDIR = ../../liphe/src
 
 JSONDIR = -I/home/hayim/lib/json/src -I../json/src
 
-LIBS = $(HEADSUPLIBDIR) -lliphe  $(FHELIBDIR)/fhe.a $(NTLLIBDIR)/ntl.a  -lgmp  -lpthread
-INCS = $(JSONDIR) $(NTLINCDIR) $(FHEINCDIR) $(HEADSUPINCDIR)
+LIBS = -L$(LIPHELIBDIR) -lliphe  $(FHELIBDIR)/fhe.a $(NTLLIBDIR)/ntl.a  -lgmp  -lpthread
+INCS = $(JSONDIR) -I$(NTLINCDIR) -I$(FHEINCDIR) -I$(LIPHEINCDIR)
 
 #all: test_zp test_helib
 all: test_zp test_helib

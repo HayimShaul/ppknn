@@ -33,6 +33,8 @@ std::vector<Polynomial<Number> > SpecialPolynomials<Number>::convert_to_bit;
 
 int main(int argc, char**argv) {
 	measureAccuracy = false;
+	MAX_CANDIDATES = 1;
+	RETRIES = 1;
 
 	initialize(argc, argv);
 

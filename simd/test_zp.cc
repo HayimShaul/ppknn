@@ -30,6 +30,9 @@ template<class Number>
 std::vector<Polynomial<Number> > SpecialPolynomials<Number>::convert_to_bit;
 
 int main(int argc, char **argv) {
+	RETRIES = 5;
+	MAX_CANDIDATES = -1;
+
 	srand(time(NULL));
 
 	initialize(argc, argv);

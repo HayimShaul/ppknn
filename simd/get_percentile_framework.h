@@ -404,6 +404,7 @@ int real_knn_classifier(const std::vector<Point2D<int> > &sites, const std::vect
 
 
 bool OK = true;
+int MAX_CANDIDATES = -1;
 
 template<class Number, class NumberBits>
 void secure_knn_classifier_gaussian(const std::vector<Point2D<int> > &sites, const std::vector<int> &classes, const Point2D<int> &query, std::vector<int> &classZeroCountVector, std::vector<int> &classOneCountVector) {
@@ -502,6 +503,8 @@ void secure_knn_classifier_gaussian(const std::vector<Point2D<int> > &sites, con
 
 
 		std::cout << global_timer.end("compute threashold candidates");
+		if (MAX_CANDIDATES > 0)
+			thresholdCandidates.resize(MAX_CANDIDATES);
 
 
 
@@ -595,10 +598,8 @@ void secure_knn_classifier_gaussian(const std::vector<Point2D<int> > &sites, con
 
 //	std::cout << "depth = mul " << classOneCountEnc0.mul_depth() << " add " << classOneCountEnc0.add_depth() << std::endl;
 
-	if (!OK) {
-		std::cout << "test is wrong" << std::endl;
-		exit(1);
-	}
+	if (OK)
+		std::cout << "test is OK" << std::endl;
 
 	classZeroCountVector.resize(thresholdCandidates.size());
 	classOneCountVector.resize(thresholdCandidates.size());
@@ -637,13 +638,14 @@ void secure_knn_classifier_gaussian(const std::vector<Point2D<int> > &sites, con
 
 
 int avgIterations = 0;
+int RETRIES = 5;
 
 template<class Number, class NumberBits>
 int secure_knn_classifier(const std::vector<Point2D<int> > &sites, const std::vector<int> &classes, const Point2D<int> &query) {
 	std::vector<int> classZeroCount;
 	std::vector<int> classOneCount;
 
-	for (int i = 0; i < 5; ++i) {
+	for (int i = 0; i < RETRIES; ++i) {
 		++avgIterations;
 		classZeroCount.resize(0);
 		classOneCount.resize(0);
@@ -707,7 +709,8 @@ void test_secure_knn_classifier(const std::vector<Point2D<int> > &sites, const s
 		int secKnnClass = secure_knn_classifier<Number, NumberBits>(sub_sites, classes, sites[i_query]);
 		int realKnnClass = real_knn_classifier(sub_sites, sub_classes, sites[i_query]);
 
-		std::cout << "test is OK";
+		if (OK)
+			std::cout << "test is OK";
 
 		std::cout << "Secure KNN classifier classified as: " << secKnnClass << std::endl;
 		std::cout << "Original KNN classifier classified as: " << realKnnClass << std::endl;
@@ -754,10 +757,10 @@ void test_secure_knn_classifier(const std::vector<Point2D<int> > &sites, const s
 		std::cout << "OUTPUT [14]: " << "classification failed: " << secClassificationFailed << std::endl;
 
 		std::cout << "ITERATIONS: average iterations needed: " << (avgIterations / (i_query+1)) << std::endl;
-
-
-
 	}
+
+	if (OK)
+		std::cout << "test is OK";
 
 }
 

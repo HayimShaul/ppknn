@@ -4,14 +4,14 @@ NTLINCDIR = -I../../ntl-10.5.0-multithread/include
 NTLLIBDIR = ../../ntl-10.5.0-multithread/src
 
 FHEINCDIR = -I../../HElib-multithread/src
-FHELIBDIR = -L../../HElib-multithread/src
+FHELIBDIR = ../../HElib-multithread/src
 
 HEADSUPINCDIR = -I../../liphe/include
 HEADSUPLIBDIR = -L../../liphe/src
 
 JSONDIR = -I/home/hayim/lib/json/src -I../json/src
 
-LIBS = $(HEADSUPLIBDIR) -lliphe  $(FHELIBDIR) -lfhe $(NTLLIBDIR)/ntl.a  -lgmp  -lpthread
+LIBS = $(HEADSUPLIBDIR) -lliphe  $(FHELIBDIR)/fhe.a $(NTLLIBDIR)/ntl.a  -lgmp  -lpthread
 INCS = $(JSONDIR) $(NTLINCDIR) $(FHEINCDIR) $(HEADSUPINCDIR)
 
 #all: test_zp test_helib

@@ -246,16 +246,16 @@ void multithreaded_averages(Distances<Number, NumberBits> &_x, Number &avg, Numb
 	std::mutex mutexAvgSqrLsd;
 
 	avgAvg.set_n(_x.size());
-	avgAvg.set_max_sample(avg.p());
+	avgAvg.set_max_sample(avg.p() / 2);
 	avgAvg.compute_resample_constant();
 
 	avgAvgSqrMsd.set_n(_x.size());
-	avgAvgSqrMsd.set_max_sample(sqrMsd.p());
+	avgAvgSqrMsd.set_max_sample(sqrMsd.p() / 2);
 	avgAvgSqrMsd.set_f_m( [](int m)->int{ return ::sqrt(m*p); } );
 	avgAvgSqrMsd.compute_resample_constant();
 
 	avgAvgSqrLsd.set_n(_x.size());
-	avgAvgSqrLsd.set_max_sample(sqrLsd.p());
+	avgAvgSqrLsd.set_max_sample(sqrLsd.p() / 2);
 	avgAvgSqrLsd.set_f_m( [](int m)->int{ return ::sqrt(m); } );
 	avgAvgSqrLsd.compute_resample_constant();
 
@@ -687,11 +687,11 @@ void test_secure_knn_classifier(const std::vector<Point2D<int> > &sites, const s
 	int mismatch = 0;
 	int secClassificationFailed = 0;
 
-	int secureCorrect = 0;
-	int secureIncorrect = 0;
+	int secureCorrect[2] = {0};
+	int secureIncorrect[2] = {0};
 
-	int realCorrect = 0;
-	int realIncorrect = 0;
+	int realCorrect[2] = {0};
+	int realIncorrect[2] = {0};
 
 	for (unsigned int i_query = 0; i_query < sites.size(); ++i_query) {
 
@@ -722,18 +722,41 @@ void test_secure_knn_classifier(const std::vector<Point2D<int> > &sites, const s
 				std::cout << "real KNN and secure KNN mismatch" << std::endl;
 				++mismatch;
 			}
-			if (realKnnClass == classes[i_query]) { ++realCorrect; } else { ++realIncorrect; }
-			if (secKnnClass == classes[i_query]) { ++secureCorrect; } else { ++secureIncorrect; }
+			if (realKnnClass == classes[i_query]) { ++realCorrect[classes[i_query]]; } else { ++realIncorrect[classes[i_query]]; }
+			if (secKnnClass == classes[i_query]) { ++secureCorrect[classes[i_query]]; } else { ++secureIncorrect[classes[i_query]]; }
 		}
 
-		if (match + mismatch > 0) {
+		if (match + mismatch > 0)
 			std::cout << "OUTPUT [1]: " << "matched: " << match << " out of " << (match+mismatch) << " = " << ((int)100*match/(match+mismatch)) << "%" << std::endl;
-			std::cout << "OUTPUT [2]: " << "correct secure: " << secureCorrect << " out of " << (secureCorrect+secureIncorrect) << " = " << ((int)100*secureCorrect/(secureCorrect+secureIncorrect)) << "%" << std::endl;
-			std::cout << "OUTPUT [3]: " << "correct real: " << realCorrect << " out of " << (realCorrect+realIncorrect) << " = " << ((int)100*realCorrect/(realCorrect+realIncorrect)) << "%" << std::endl;
-		}
-		std::cout << "OUTPUT [4]: " << "classification failed: " << secClassificationFailed << std::endl;
+		std::cout << "OUTPUT [2]: " << "correct secure: class0 = " << secureCorrect[0] << " class1 = " << secureCorrect[1] << std::endl;
+		std::cout << "OUTPUT [3]: " << "incorrect secure: class0 = " << secureIncorrect[0] << " class1 = " << secureIncorrect[1] << std::endl;
+		std::cout << "OUTPUT [4]: " << "total: " << (secureCorrect[0]+secureCorrect[1]+secureIncorrect[0]+secureIncorrect[1]) << std::endl;
+
+		if (secureCorrect[0]+secureCorrect[1]+secureIncorrect[0]+secureIncorrect[1] > 0)
+			std::cout << "OUTPUT [5]: " << "secure ratio: " << ((int)100*(secureCorrect[0]+secureCorrect[1])/(secureCorrect[0]+secureCorrect[1]+secureIncorrect[0]+secureIncorrect[1])) << "%" << std::endl;
+		if (secureCorrect[1] + secureIncorrect[1])
+			std::cout << "OUTPUT [6]: " << "secure Dice score1: " << (2.0*secureCorrect[1] / (secureCorrect[1] + secureIncorrect[1])) << std::endl;
+		if (secureCorrect[0] + secureIncorrect[0])
+			std::cout << "OUTPUT [7]: " << "secure Dice score0: " << (2.0*secureCorrect[0] / (secureCorrect[0] + secureIncorrect[0])) << std::endl;
+
+
+
+
+		std::cout << "OUTPUT [8]: " << "correct real: class0 = " << realCorrect[0] << " class1 = " << realCorrect[1] << std::endl;
+		std::cout << "OUTPUT [9]: " << "incorrect real: class0 = " << realIncorrect[0] << " class1 = " << realIncorrect[1] << std::endl;
+		std::cout << "OUTPUT [10]: " << "total: " << (realCorrect[0]+realCorrect[1]+realIncorrect[0]+realIncorrect[1]) << std::endl;
+		std::cout << "OUTPUT [11]: " << "insecure ratio: " << ((int)100*(realCorrect[0]+realCorrect[1])/(realCorrect[0]+realCorrect[1]+realIncorrect[0]+realIncorrect[1])) << "%" << std::endl;
+		if (realCorrect[1] + realIncorrect[1])
+			std::cout << "OUTPUT [12]: " << "insecure Dice score1: " << (2.0*realCorrect[1] / (realCorrect[1] + realIncorrect[1])) << std::endl;
+		if (realCorrect[0] + realIncorrect[0])
+			std::cout << "OUTPUT [13]: " << "insecure Dice score0: " << (2.0*realCorrect[0] / (realCorrect[0] + realIncorrect[0])) << std::endl;
+
+		std::cout << "OUTPUT [14]: " << "classification failed: " << secClassificationFailed << std::endl;
 
 		std::cout << "ITERATIONS: average iterations needed: " << (avgIterations / (i_query+1)) << std::endl;
+
+
+
 	}
 
 }

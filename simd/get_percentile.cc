@@ -5,6 +5,7 @@
 #include <iostream>
 #include <sstream>
 #include <algorithm>
+#include <random>
 
 #include "json.hpp"
 using nlohmann::json;

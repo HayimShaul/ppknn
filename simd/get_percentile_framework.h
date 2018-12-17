@@ -748,10 +748,11 @@ void test_secure_knn_classifier(const std::vector<Point2D<int> > &sites, const s
 		std::cout << "OUTPUT [8]: " << "correct real: class0 = " << realCorrect[0] << " class1 = " << realCorrect[1] << std::endl;
 		std::cout << "OUTPUT [9]: " << "incorrect real: class0 = " << realIncorrect[0] << " class1 = " << realIncorrect[1] << std::endl;
 		std::cout << "OUTPUT [10]: " << "total: " << (realCorrect[0]+realCorrect[1]+realIncorrect[0]+realIncorrect[1]) << std::endl;
-		std::cout << "OUTPUT [11]: " << "insecure ratio: " << ((int)100*(realCorrect[0]+realCorrect[1])/(realCorrect[0]+realCorrect[1]+realIncorrect[0]+realIncorrect[1])) << "%" << std::endl;
-		if (realCorrect[1] + realIncorrect[1])
+		if (realCorrect[0]+realCorrect[1]+realIncorrect[0]+realIncorrect[1] > 0)
+			std::cout << "OUTPUT [11]: " << "insecure ratio: " << ((int)100*(realCorrect[0]+realCorrect[1])/(realCorrect[0]+realCorrect[1]+realIncorrect[0]+realIncorrect[1])) << "%" << std::endl;
+		if (realCorrect[1] + realIncorrect[1] > 0)
 			std::cout << "OUTPUT [12]: " << "insecure Dice score1: " << (2.0*realCorrect[1] / (realCorrect[1] + realIncorrect[1])) << std::endl;
-		if (realCorrect[0] + realIncorrect[0])
+		if (realCorrect[0] + realIncorrect[0] > 0)
 			std::cout << "OUTPUT [13]: " << "insecure Dice score0: " << (2.0*realCorrect[0] / (realCorrect[0] + realIncorrect[0])) << std::endl;
 
 		std::cout << "OUTPUT [14]: " << "classification failed: " << secClassificationFailed << std::endl;

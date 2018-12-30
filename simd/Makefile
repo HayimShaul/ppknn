@@ -15,17 +15,20 @@ LIBS = -L$(LIPHELIBDIR) -lliphe  $(FHELIBDIR)/fhe.a $(NTLLIBDIR)/ntl.a  -lgmp  -
 INCS = $(JSONDIR) -I$(NTLINCDIR) -I$(FHEINCDIR) -I$(LIPHEINCDIR)
 
 #all: test_zp test_helib
-all: test_zp test_helib
+all: test_zp test_helib test_kish_vs_k
 
 #all: test min fast_min min2 min3
 
 test_folding: test_folding.o
 	g++ $(LDFLAGS) -o $@ $^ $(LIBS)
 
-test_zp: test_zp.o get_percentile.o point2d.o mem.o
+test_kish_vs_k: test_zp.o get_percentile.o point2d.o
 	g++ $(LDFLAGS) -o $@ $^ $(LIBS)
 
-test_helib: test_helib.o get_percentile.o point2d.o mem.o
+test_zp: test_zp.o get_percentile.o point2d.o
+	g++ $(LDFLAGS) -o $@ $^ $(LIBS)
+
+test_helib: test_helib.o get_percentile.o point2d.o
 	g++ $(LDFLAGS) -o $@ $^ $(LIBS)
 
 

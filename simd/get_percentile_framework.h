@@ -367,7 +367,7 @@ void print_histogram(const std::vector<Point2D<int> > &sites, const std::vector<
 	}
 }
 
-int real_knn_classifier(const std::vector<Point2D<int> > &sites, const std::vector<int> &classes, const Point2D<int> &query) {
+int real_knn_classifier(const std::vector<Point2D<int> > &sites, const std::vector<int> &classes, const Point2D<int> &query, int k = -1) {
 	print_histogram(sites, classes, query);
 
 	std::vector<float> distances;
@@ -377,7 +377,9 @@ int real_knn_classifier(const std::vector<Point2D<int> > &sites, const std::vect
 	}
 	std::sort(distances.begin(), distances.end());
 
-	float threshold = distances[distances.size() * 0.02];
+	if (k == -1)
+		k = distances.size() * 0.02;
+	float threshold = distances[k];
 
 	int classOne = 0;
 	int classZero = 0;
@@ -390,6 +392,22 @@ int real_knn_classifier(const std::vector<Point2D<int> > &sites, const std::vect
 			else if (classes[i_sites] == 1)
 				++classOne;
 			else {
+				std::cerr << "Error: classes should be 0s of 1s\n";
+				exit(1);
+			}
+		}
+	}
+	int counted = classZero + classOne;
+	for (unsigned int i_sites = 0; i_sites < sites.size(); ++i_sites) {
+		float dist = sqr(sites[i_sites].x - query.x) + sqr(sites[i_sites].y - query.y);
+		if ((dist == threshold) && (counted < k)) {
+			if (classes[i_sites] == 0) {
+				++classZero;
+				++counted;
+			} else if (classes[i_sites] == 1) {
+				++classOne;
+				++counted;
+			} else {
 				std::cerr << "Error: classes should be 0s of 1s\n";
 				exit(1);
 			}
@@ -764,5 +782,43 @@ void test_secure_knn_classifier(const std::vector<Point2D<int> > &sites, const s
 
 }
 
+void test_kish_classifier(const std::vector<Point2D<int> > &sites, const std::vector<int> &classes) {
+
+	for (unsigned int i_query = 0; i_query < sites.size(); ++i_query) {
+		std::vector<Point2D<int> > sub_sites;
+		std::vector<int> sub_classes;
+		for (unsigned int i_copy = 0; i_copy < sites.size(); ++i_copy) {
+			if (i_copy != i_query) {
+				sub_classes.push_back(classes[i_copy]);
+				sub_sites.push_back(sites[i_copy]);
+			}
+		}
+
+		int correct[2] = {0};
+		int incorrect[2] = {0};
+		for (int k = sub_sites.size() * 0.01; k < sub_sites.size() * 0.03; ++k) {
+			int knnClass = real_knn_classifier(sub_sites, sub_classes, sites[i_query]);
+
+			std::cout << "KNN k = " << k << " classifier classified as: " << knnClass << std::endl;
+
+			if (knnClass == classes[i_query]) { ++correct[classes[i_query]]; } else { ++incorrect[classes[i_query]]; }
+
+			std::cout << "OUTPUT [2]: " << k << " correct class0 = " << correct[0] << " class1 = " << correct[1] << std::endl;
+			std::cout << "OUTPUT [3]: " << k << " incorrect class0 = " << incorrect[0] << " class1 = " << incorrect[1] << std::endl;
+			std::cout << "OUTPUT [4]: " << k << " total: " << (correct[0]+correct[1]+incorrect[0]+incorrect[1]) << std::endl;
+
+			if (correct[0]+correct[1]+incorrect[0]+incorrect[1] > 0)
+				std::cout << "OUTPUT [5]: " << k << " ratio: " << ((int)100*(correct[0]+correct[1])/(correct[0]+correct[1]+incorrect[0]+incorrect[1])) << "%" << std::endl;
+			if (correct[1] + incorrect[1])
+				std::cout << "OUTPUT [6]: " << k << " Dice score1: " << (2.0*correct[1] / (correct[1] + incorrect[1])) << std::endl;
+			if (correct[0] + incorrect[0])
+				std::cout << "OUTPUT [7]: " << k << " Dice score0: " << (2.0*correct[0] / (correct[0] + incorrect[0])) << std::endl;
+		}
+	}
+
+	if (OK)
+		std::cout << "test is OK";
+
+}
 
 #endif

@@ -43,7 +43,7 @@ int main(int argc, char**argv) {
 	long R = 1;
 	long d = 1;
 	long c = 2;
-	long k = 80;
+	long k = keySize;
 	long s = 0;
 	long chosen_m = 0;
 	Vec<long> gens;

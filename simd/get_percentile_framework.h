@@ -492,7 +492,7 @@ void secure_knn_classifier_gaussian(const std::vector<Point2D<int> > &sites, con
 			sigma += SpecialPolynomials<Number>::sqrt_polynomial.compute( avgSqrLsdEnc - avgLsdEnc, &threads );
 		}
 
-		int inv2 = power_mod(2, phi(Number::get_global_ring_size()) - 1, Number::get_global_ring_size());
+		long inv2 = power_mod(2, phi(Number::get_global_ring_size()) - 1, Number::get_global_ring_size());
 		std::cout << "2^{-1} mod " << Number::get_global_ring_size() << " = " << inv2 << std::endl;
 
 		{
@@ -505,7 +505,8 @@ void secure_knn_classifier_gaussian(const std::vector<Point2D<int> > &sites, con
 				thresholdCandidates.push_back(threshold);
 			}
 			{
-				Number threshold = avgEnc - sigma*2;
+//				Number threshold = avgEnc - sigma*2;
+				Number threshold = avgEnc - sigma - sigma;
 				thresholdCandidates.push_back(threshold);
 			}
 			{
@@ -698,7 +699,8 @@ int secure_knn_classifier(const std::vector<Point2D<int> > &sites, const std::ve
 		}
 	}
 
-	return -1;
+	return 0;
+//	return -1;
 }
 
 template<class Number, class NumberBits>
@@ -784,37 +786,41 @@ void test_secure_knn_classifier(const std::vector<Point2D<int> > &sites, const s
 }
 
 void test_kish_classifier(const std::vector<Point2D<int> > &sites, const std::vector<int> &classes) {
+	unsigned int MIN_K = sites.size() * 0.02;
+	unsigned int MAX_K = MIN_K + 1;
 
-	for (unsigned int i_query = 0; i_query < sites.size(); ++i_query) {
-		std::vector<Point2D<int> > sub_sites;
-		std::vector<int> sub_classes;
-		for (unsigned int i_copy = 0; i_copy < sites.size(); ++i_copy) {
-			if (i_copy != i_query) {
-				sub_classes.push_back(classes[i_copy]);
-				sub_sites.push_back(sites[i_copy]);
+	for (unsigned int k = MIN_K; k < MAX_K; ++k) {
+
+//		int correct[2] = {0};
+//		int incorrect[2] = {0};
+
+		int knn = 0;
+		int real = 0;
+		int knn_real = 0;
+
+		for (unsigned int i_query = 0; i_query < sites.size(); ++i_query) {
+			std::vector<Point2D<int> > sub_sites;
+			std::vector<int> sub_classes;
+			for (unsigned int i_copy = 0; i_copy < sites.size(); ++i_copy) {
+				if (i_copy != i_query) {
+					sub_classes.push_back(classes[i_copy]);
+					sub_sites.push_back(sites[i_copy]);
+				}
 			}
+
+			int knnClass = real_knn_classifier(sub_sites, sub_classes, sites[i_query], k);
+
+			if (knnClass)
+				++knn;
+			if (classes[i_query])
+				++real;
+			if (knnClass && classes[i_query])
+				++knn_real;
 		}
 
-		int correct[2] = {0};
-		int incorrect[2] = {0};
-		for (int k = sub_sites.size() * 0.01; k < sub_sites.size() * 0.03; ++k) {
-			int knnClass = real_knn_classifier(sub_sites, sub_classes, sites[i_query]);
+		std::cout << "KNN k = " << k << std::endl;
 
-			std::cout << "KNN k = " << k << " classifier classified as: " << knnClass << std::endl;
-
-			if (knnClass == classes[i_query]) { ++correct[classes[i_query]]; } else { ++incorrect[classes[i_query]]; }
-
-			std::cout << "OUTPUT [2]: " << k << " correct class0 = " << correct[0] << " class1 = " << correct[1] << std::endl;
-			std::cout << "OUTPUT [3]: " << k << " incorrect class0 = " << incorrect[0] << " class1 = " << incorrect[1] << std::endl;
-			std::cout << "OUTPUT [4]: " << k << " total: " << (correct[0]+correct[1]+incorrect[0]+incorrect[1]) << std::endl;
-
-			if (correct[0]+correct[1]+incorrect[0]+incorrect[1] > 0)
-				std::cout << "OUTPUT [5]: " << k << " ratio: " << ((int)100*(correct[0]+correct[1])/(correct[0]+correct[1]+incorrect[0]+incorrect[1])) << "%" << std::endl;
-			if (correct[1] + incorrect[1])
-				std::cout << "OUTPUT [6]: " << k << " Dice score1: " << (2.0*correct[1] / (correct[1] + incorrect[1])) << std::endl;
-			if (correct[0] + incorrect[0])
-				std::cout << "OUTPUT [7]: " << k << " Dice score0: " << (2.0*correct[0] / (correct[0] + incorrect[0])) << std::endl;
-		}
+		std::cout << "KISH OUTPUT: " << k << " Dice score1: " << (2.0*knn_real / (knn + knn_real)) << std::endl;
 	}
 
 	if (OK)

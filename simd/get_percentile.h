@@ -11,6 +11,7 @@ extern long p;
 extern long r;
 
 extern int thread_num;
+extern int keySize;
 
 extern std::vector<Point2D<int> > rawDiscreteData;
 extern std::vector<int> rawDataClasses;

@@ -11,7 +11,7 @@ LIPHELIBDIR = ../../liphe/src
 
 JSONDIR = -I/home/hayim/lib/json/src -I../json/src
 
-LIBS = -L$(LIPHELIBDIR) -lliphe  $(FHELIBDIR)/fhe.a $(NTLLIBDIR)/ntl.a  -lgmp  -lpthread
+LIBS = -L$(LIPHELIBDIR) -lliphe -lHelibLiphe  $(FHELIBDIR)/fhe.a $(NTLLIBDIR)/ntl.a  -lgmp  -lpthread
 INCS = $(JSONDIR) -I$(NTLINCDIR) -I$(FHEINCDIR) -I$(LIPHEINCDIR)
 
 #all: test_zp test_helib
@@ -22,7 +22,7 @@ all: test_zp test_helib test_kish_vs_k
 test_folding: test_folding.o
 	g++ $(LDFLAGS) -o $@ $^ $(LIBS)
 
-test_kish_vs_k: test_zp.o get_percentile.o point2d.o
+test_kish_vs_k: test_kish_vs_k.o get_percentile.o point2d.o
 	g++ $(LDFLAGS) -o $@ $^ $(LIBS)
 
 test_zp: test_zp.o get_percentile.o point2d.o

@@ -14,7 +14,7 @@
 #include "special_polynomials.h"
 
 #define SIMD_FACTOR 600
-typedef ZP<SIMD_FACTOR> MyZP;
+typedef ZP MyZP;
 typedef UnsignedWord<18, MyZP> MyZPBits;
 
 template<class Number>
@@ -30,6 +30,8 @@ template<class Number>
 std::vector<Polynomial<Number> > SpecialPolynomials<Number>::convert_to_bit;
 
 int main(int argc, char **argv) {
+	ZP::set_global_simd_factor(SIMD_FACTOR);
+	
 	RETRIES = 5;
 	MAX_CANDIDATES = -1;
 

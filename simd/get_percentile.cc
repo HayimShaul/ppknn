@@ -36,6 +36,8 @@ Point2D<float> maxPoint;
 int maxX = 100;
 int maxY = 100;
 
+int keySize = 80;
+
 bool read_csv_line(std::istream *in, float &x, float &y, int &cls) {
 	std::string str;
 
@@ -150,6 +152,8 @@ void initialize(int argc, char **argv) {
 			p = atoi(argv[argc_i] + 4);
 			maxX = maxY = p/2;
 		}
+		if (memcmp(argv[argc_i], "--key=", 6) == 0)
+			keySize = atoi(argv[argc_i] + 6);
 		if (memcmp(argv[argc_i], "--res=", 6) == 0)
 			maxX = maxY = atoi(argv[argc_i] + 6);
 		if (memcmp(argv[argc_i], "--n=", 4) == 0)
@@ -174,6 +178,7 @@ void initialize(int argc, char **argv) {
 			ThreadPool::init(atoi(argv[argc_i] + 4));
 
 		if (strcmp(argv[argc_i], "--help") == 0) {
+			std::cout << "   --key= key size (default 80)" << std::endl;
 			std::cout << "   --res= set maxX and maxY" << std::endl;
 			std::cout << "   --L=" << std::endl;
 			std::cout << "   --p=" << std::endl;

@@ -15,6 +15,7 @@
 #include "get_percentile.h"
 #include "special_polynomials.h"
 #include "input_database.h"
+#include "configuration.h"
 
 
 TakeTimes global_timer;
@@ -801,8 +802,14 @@ void test_kish_classifier(const std::vector<Point2D<int> > &sites, const std::ve
 		for (unsigned int i_query = 0; i_query < sites.size(); ++i_query) {
 			std::vector<Point2D<int> > sub_sites;
 			std::vector<int> sub_classes;
+			std::set<int> exclude;
+			exclude.insert(i_query);
+			while (exclude.size() < Configuration::cv_k_fold) {
+				exclude.insert(random() % sites.size());
+			}
+
 			for (unsigned int i_copy = 0; i_copy < sites.size(); ++i_copy) {
-				if (i_copy != i_query) {
+				if (exclude.find(i_copy) == exclude.end()) {
 					sub_classes.push_back(classes[i_copy]);
 					sub_sites.push_back(sites[i_copy]);
 				}

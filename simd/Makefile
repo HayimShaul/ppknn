@@ -22,13 +22,13 @@ all: test_zp test_helib test_kish_vs_k
 test_folding: test_folding.o
 	g++ $(LDFLAGS) -o $@ $^ $(LIBS)
 
-test_kish_vs_k: test_kish_vs_k.o get_percentile.o point2d.o
+test_kish_vs_k: test_kish_vs_k.o get_percentile.o point2d.o configuration.o
 	g++ $(LDFLAGS) -o $@ $^ $(LIBS)
 
-test_zp: test_zp.o get_percentile.o point2d.o
+test_zp: test_zp.o get_percentile.o point2d.o configuration.o
 	g++ $(LDFLAGS) -o $@ $^ $(LIBS)
 
-test_helib: test_helib.o get_percentile.o point2d.o
+test_helib: test_helib.o get_percentile.o point2d.o configuration.o
 	g++ $(LDFLAGS) -o $@ $^ $(LIBS)
 
 

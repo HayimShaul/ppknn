@@ -17,6 +17,7 @@ using nlohmann::json;
 
 #include "thread_pool.h"
 #include "get_percentile.h"
+#include "configuration.h"
 
 
 bool measureAccuracy = true;
@@ -176,6 +177,9 @@ void initialize(int argc, char **argv) {
 		}
 		if (memcmp(argv[argc_i], "--t=", 4) == 0)
 			ThreadPool::init(atoi(argv[argc_i] + 4));
+		if (memcmp(argv[argc_i], "--cv=", 5) == 0) {
+			Configuration::cv_k_fold = atoi(argv[argc_i] + 5);
+		}
 
 		if (strcmp(argv[argc_i], "--help") == 0) {
 			std::cout << "   --key= key size (default 80)" << std::endl;
@@ -183,9 +187,10 @@ void initialize(int argc, char **argv) {
 			std::cout << "   --L=" << std::endl;
 			std::cout << "   --p=" << std::endl;
 			std::cout << "   --n= how many points to generate (can't go with --in)" << std::endl;
-			std::cout << "   --in=" << std::endl;
+			std::cout << "   --in=  the csv file name of the input" << std::endl;
 			std::cout << "   --q= query point" << std::endl;
 			std::cout << "   --t= thread number" << std::endl;
+			std::cout << "   --cv=1  how many samples to remove when testing. k-fold cv" << std::endl;
 		}
 	}
 

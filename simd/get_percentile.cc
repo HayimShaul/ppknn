@@ -22,37 +22,64 @@ using nlohmann::json;
 
 bool measureAccuracy = true;
 
-std::vector<Point2D<float> > rawData;
-std::vector<Point2D<int> > rawDiscreteData;
+std::vector<Point<float> > rawData;
+std::vector<Point<int> > rawDiscreteData;
 std::vector<int> rawDataClasses;
 
-Point2D<float> query;
-Point2D<int> discreteQuery;
+Point<float> query;
+Point<int> discreteQuery;
 
 
 // bounding box for Boston
-Point2D<float> minPoint;
-Point2D<float> maxPoint;
+Point<float> minPoint;
+Point<float> maxPoint;
 
-int maxX = 100;
-int maxY = 100;
+Point<int> resolutionInt;
+Point<float> resolutionFloat;
 
 int keySize = 80;
 
-bool read_csv_line(std::istream *in, float &x, float &y, int &cls) {
+void stringToType(float &n, const std::string &s) { n = std::stof(s); }
+void stringToType(int &n, const std::string &s) { n = std::stoi(s); }
+
+template<class Number>
+std::vector<Number> parse_vector(const char *line) {
+	std::vector<Number> v;
+	std::string str(line);
+	std::string delimiter(",");
+
+	v.resize(0);
+	size_t pos = 0;
+	std::string token;
+	while ((pos = str.find(delimiter)) != std::string::npos) {
+		token = str.substr(0, pos);
+		Number n;
+		stringToType(n, token);
+		v.insert(v.begin(), n);
+		str.erase(0, pos + delimiter.length());
+	}
+	v.insert(v.begin(), std::stof(str));
+
+	return v;
+}
+
+bool read_csv_line(std::istream *in, std::vector<float> &v, int &cls) {
 	std::string str;
+	std::string delimiter(",");
 
 	try {
-		if (!getline(*in, str, ','))
+		v.resize(0);
+		if (!getline(*in, str))
 			return false;
-		x = std::stod(str);
 
-		if (!getline(*in, str, ','))
-			return false;
-		y = std::stod(str);
+		size_t pos = 0;
+		std::string token;
+		while ((pos = str.find(delimiter)) != std::string::npos) {
+			token = str.substr(0, pos);
+			v.insert(v.begin(), std::stof(token));
+			str.erase(0, pos + delimiter.length());
+		}
 
-		if (!getline(*in, str, '\n'))
-			return false;
 		cls = std::stoi(str);
 	} catch (std::exception &e) {
 		return false;
@@ -71,11 +98,11 @@ void read_classifier_data(const char *fname) {
 		in = new std::ifstream(fname);
 	}
 
-	float x,y;
+	std::vector<float> v;
 	int c;
-	while (read_csv_line(in, x,y,c)) {
-		std::cout << "read " << x << ", " << y << ", " << c << std::endl;
-		Point2D<float> p(x,y);
+	while (read_csv_line(in, v, c)) {
+		std::cout << "read " << v[0] << ", " << v[1] << ", " << c << std::endl;
+		Point<float> p(v);
 		rawData.push_back(p);
 		rawDataClasses.push_back(c);
 	}
@@ -85,45 +112,45 @@ void read_classifier_data(const char *fname) {
 }
 
 // read data from expedia json
-void read_hotel_data(const char *fname) {
-	std::istream *in;
-
-	if (strcmp(fname, "-") == 0) {
-		in = &(std::cin);
-	} else {
-		in = new std::ifstream(fname);
-	}
-
-	json j;
-	(*in) >> j;
-
-	if (j.find("HotelListResponse") != j.end()) {
-		rawData.resize( j["HotelListResponse"]["HotelList"]["HotelSummary"].size() );
-		j = j["HotelListResponse"]["HotelList"]["HotelSummary"];
-		int i = 0;
-		for (json::iterator it = j.begin(); it != j.end(); ++it) {
-			Point2D<float> p( (*it)["longitude"], (*it)["latitude"] );
-
-			std::cout << "point[" << i << "] = " << p << std::endl;
-			rawData[i] = p;
-			++i;
-		}
-	} else if (j.find("2Ddata") != j.end()) {
-		rawData.resize( j["2Ddata"].size() );
-		j = j["2Ddata"];
-		int i = 0;
-		for (json::iterator it = j.begin(); it != j.end(); ++it) {
-			Point2D<float> p( (*it)["x"], (*it)["y"] );
-
-			std::cout << "point[" << i << "] = " << p << std::endl;
-			rawData[i] = p;
-			++i;
-		}
-	}
-
-	if (in != &(std::cin))
-		delete in;
-}
+//void read_hotel_data(const char *fname) {
+//	std::istream *in;
+//
+//	if (strcmp(fname, "-") == 0) {
+//		in = &(std::cin);
+//	} else {
+//		in = new std::ifstream(fname);
+//	}
+//
+//	json j;
+//	(*in) >> j;
+//
+//	if (j.find("HotelListResponse") != j.end()) {
+//		rawData.resize( j["HotelListResponse"]["HotelList"]["HotelSummary"].size() );
+//		j = j["HotelListResponse"]["HotelList"]["HotelSummary"];
+//		int i = 0;
+//		for (json::iterator it = j.begin(); it != j.end(); ++it) {
+//			Point<float> p( (*it)["longitude"], (*it)["latitude"] );
+//
+//			std::cout << "point[" << i << "] = " << p << std::endl;
+//			rawData[i] = p;
+//			++i;
+//		}
+//	} else if (j.find("2Ddata") != j.end()) {
+//		rawData.resize( j["2Ddata"].size() );
+//		j = j["2Ddata"];
+//		int i = 0;
+//		for (json::iterator it = j.begin(); it != j.end(); ++it) {
+//			Point<float> p( (*it)["x"], (*it)["y"] );
+//
+//			std::cout << "point[" << i << "] = " << p << std::endl;
+//			rawData[i] = p;
+//			++i;
+//		}
+//	}
+//
+//	if (in != &(std::cin))
+//		delete in;
+//}
 
 
 int mylog2(int x) {
@@ -140,6 +167,11 @@ long r = 0;
 bool flex = false;
 int thread_num = 1;
 
+enum SetResolutionMethod {
+	ByP,
+	Default,
+	ByUser,
+};
 
 void initialize(int argc, char **argv) {
 	char defaultFname[] = "-";
@@ -147,16 +179,20 @@ void initialize(int argc, char **argv) {
 	bool no_query = true;
 	int n = -1;
 	bool has_fname = false;
+	SetResolutionMethod setResolutionMethod = SetResolutionMethod::Default;
 
 	for (int argc_i = 0; argc_i < argc; ++argc_i) {
 		if (memcmp(argv[argc_i], "--p=", 4) == 0) {
 			p = atoi(argv[argc_i] + 4);
-			maxX = maxY = p/2;
+			setResolutionMethod = SetResolutionMethod::ByP;
 		}
 		if (memcmp(argv[argc_i], "--key=", 6) == 0)
 			keySize = atoi(argv[argc_i] + 6);
-		if (memcmp(argv[argc_i], "--res=", 6) == 0)
-			maxX = maxY = atoi(argv[argc_i] + 6);
+		if (memcmp(argv[argc_i], "--res=", 6) == 0) {
+			resolutionInt = Point<int>(parse_vector<int>(argv[argc_i] + 6));
+			resolutionFloat = Point<float>(parse_vector<float>(argv[argc_i] + 6));
+			setResolutionMethod = SetResolutionMethod::ByUser;
+		}
 		if (memcmp(argv[argc_i], "--n=", 4) == 0)
 			n = atoi(argv[argc_i] + 4);
 		if (memcmp(argv[argc_i], "--L=", 4) == 0)
@@ -166,13 +202,7 @@ void initialize(int argc, char **argv) {
 			has_fname = true;
 		}
 		if (memcmp(argv[argc_i], "--q=", 4) == 0) {
-			float x, y;
-			if ((sscanf(argv[argc_i] + 4, "%f,%f", &x, &y) != 2) &&
-					(sscanf(argv[argc_i] + 4, "(%f,%f)", &x, &y) != 2)) {
-				std::cerr << "Error parsing query point " << (argv[argc_i] + 5) << std::endl;
-				exit(1);
-			}
-			query = Point2D<float>(x,y);
+			query = Point<float>(parse_vector<float>(argv[argc_i] + 4));
 			no_query = false;
 		}
 		if (memcmp(argv[argc_i], "--t=", 4) == 0)
@@ -183,7 +213,7 @@ void initialize(int argc, char **argv) {
 
 		if (strcmp(argv[argc_i], "--help") == 0) {
 			std::cout << "   --key= key size (default 80)" << std::endl;
-			std::cout << "   --res= set maxX and maxY" << std::endl;
+			std::cout << "   --res=maxX,maxY,...   set the resolution of the grid" << std::endl;
 			std::cout << "   --L=" << std::endl;
 			std::cout << "   --p=" << std::endl;
 			std::cout << "   --n= how many points to generate (can't go with --in)" << std::endl;
@@ -205,60 +235,79 @@ void initialize(int argc, char **argv) {
 	}
 
 
-	if (has_fname) {
-//		rawData = read_data(fname);
-		read_classifier_data(fname);
+	if (!has_fname) {
+		std::cerr << "Must provide an input filename" << std::endl;
+		exit(1);
+	}
 
-		// Find the maximal and minimal x and y coordinates
-		maxPoint = rawData[0];
-		minPoint = rawData[0];
-		for (auto i = rawData.begin(); i != rawData.end(); ++i) {
-			maxPoint = max(maxPoint, *i);
-			minPoint = min(minPoint, *i);
+	read_classifier_data(fname);
+
+	if (setResolutionMethod == SetResolutionMethod::ByP) {
+		resolutionInt.dim( rawData[0].dim() );
+		resolutionFloat.dim( rawData[0].dim() );
+		for (unsigned int i = 0; i < rawData[0].dim(); ++i) {
+			resolutionFloat[i] = resolutionInt[i] = p/rawData[0].dim();
 		}
-
-		std::cout << "min value " << minPoint << std::endl;
-		std::cout << "min value " << maxPoint << std::endl;
-
-		discreteBase = minPoint;
-		discreteResolution = Point2D<float>(maxX, maxY) / (maxPoint - minPoint);
-
-		std::cout << "Discrete data:" << std::endl;
-		rawDiscreteData.resize(0);
-		for (auto i = rawData.begin(); i != rawData.end(); ++i) {
-			Point2D<int> p = discretify(*i);
-			rawDiscreteData.push_back(p);
-			std::cout << "  " << p << std::endl;
-		}
-	} else {
-		std::default_random_engine _generator(clock());
-		std::uniform_int_distribution<int> xDistribution(0, maxX);
-		std::uniform_int_distribution<int> yDistribution(0, maxY);
-		for (int i = 0; i < n; ++i) {
-			int x = xDistribution(_generator);
-			int y = yDistribution(_generator);
-			Point2D<float> raw_p( x, y );
-			Point2D<int> p( x, y );
-
-			std::cout << "point[" << i << "] = " << p << std::endl;
-			rawData.push_back(raw_p);
-			rawDiscreteData.push_back(p);
-		}
-
-		maxPoint = Point2D<float>(maxX, maxY);
-		minPoint = Point2D<float>(0, 0);
-
-		std::cout << "min value " << minPoint << std::endl;
-		std::cout << "min value " << maxPoint << std::endl;
-
-		discreteBase = minPoint;
-		discreteResolution = Point2D<float>(maxX, maxY) / (maxPoint - minPoint);
-
-		std::cout << "Discrete data:" << std::endl;
-		for (auto i = rawDiscreteData.begin(); i != rawDiscreteData.end(); ++i) {
-			std::cout << "  " << (*i) << std::endl;
+	} else if (setResolutionMethod == SetResolutionMethod::Default) {
+		resolutionInt.dim( rawData[0].dim() );
+		resolutionFloat.dim( rawData[0].dim() );
+		for (unsigned int i = 0; i < rawData[0].dim(); ++i) {
+			resolutionFloat[i] = resolutionInt[i] = 100;
 		}
 	}
+
+
+	// Find the maximal and minimal x and y coordinates
+	maxPoint = rawData[0];
+	minPoint = rawData[0];
+	for (auto i = rawData.begin(); i != rawData.end(); ++i) {
+		maxPoint = max(maxPoint, *i);
+		minPoint = min(minPoint, *i);
+	}
+
+	std::cout << "min value " << minPoint << std::endl;
+	std::cout << "min value " << maxPoint << std::endl;
+
+	discreteBase = minPoint;
+	discreteResolution = resolutionFloat / (maxPoint - minPoint);
+
+	std::cout << "Discrete data:" << std::endl;
+	rawDiscreteData.resize(0);
+	for (auto i = rawData.begin(); i != rawData.end(); ++i) {
+		Point<int> p = discretify(*i);
+		rawDiscreteData.push_back(p);
+		std::cout << "  " << p << std::endl;
+	}
+//	} else {
+//		std::cerr << "must provide input filename" << std::endl;
+//		std::default_random_engine _generator(clock());
+//		std::uniform_int_distribution<int> xDistribution(0, maxX);
+//		std::uniform_int_distribution<int> yDistribution(0, maxY);
+//		for (int i = 0; i < n; ++i) {
+//			int x = xDistribution(_generator);
+//			int y = yDistribution(_generator);
+//			Point<float> raw_p( x, y );
+//			Point<int> p( x, y );
+//
+//			std::cout << "point[" << i << "] = " << p << std::endl;
+//			rawData.push_back(raw_p);
+//			rawDiscreteData.push_back(p);
+//		}
+//
+//		maxPoint = Point<float>(maxX, maxY);
+//		minPoint = Point<float>(0, 0);
+//
+//		std::cout << "min value " << minPoint << std::endl;
+//		std::cout << "min value " << maxPoint << std::endl;
+//
+//		discreteBase = minPoint;
+//		discreteResolution = Point<float>(maxX, maxY) / (maxPoint - minPoint);
+//
+//		std::cout << "Discrete data:" << std::endl;
+//		for (auto i = rawDiscreteData.begin(); i != rawDiscreteData.end(); ++i) {
+//			std::cout << "  " << (*i) << std::endl;
+//		}
+//	}
 
 
 
@@ -271,10 +320,11 @@ void initialize(int argc, char **argv) {
 
 	if (no_query) {
 		std::default_random_engine generator(clock());
-		std::uniform_int_distribution<int> randomX(0, maxX);
-		std::uniform_int_distribution<int> randomY(0, maxY);
-
-		discreteQuery = Point2D<int>(randomX(generator), randomY(generator));
+		discreteQuery.dim(resolutionInt.dim());
+		for (unsigned int i = 0; i < resolutionInt.dim(); ++i) {
+			std::uniform_int_distribution<int> randomX(0, resolutionInt[i]);
+			discreteQuery[i] = randomX(generator);
+		}
 		query = undiscretify(discreteQuery);
 	} else {
 		discreteQuery = discretify(query);
@@ -286,20 +336,20 @@ void initialize(int argc, char **argv) {
 
 	std::cout << "Discrete distances:" << std::endl;
 	for (auto i = rawDiscreteData.begin(); i != rawDiscreteData.end(); ++i) {
-		int dist = abs(i->x - discreteQuery.x) + abs(i->y - discreteQuery.y);
+		int dist = (*i - discreteQuery).normL1();
 		std::cout << dist << std::endl;
 	}
 
 	int avg = 0;
 	for (auto i = rawDiscreteData.begin(); i != rawDiscreteData.end(); ++i) {
-		int dist = abs(i->x - discreteQuery.x) + abs(i->y - discreteQuery.y);
+		int dist = (*i - discreteQuery).normL1();
 		avg += dist;
 	}
 	avg /= rawDiscreteData.size();
 
 	int sigma = 0;
 	for (auto i = rawDiscreteData.begin(); i != rawDiscreteData.end(); ++i) {
-		int dist = abs(i->x - discreteQuery.x) + abs(i->y - discreteQuery.y);
+		int dist = (*i - discreteQuery).normL1();
 		sigma += (dist - avg) * (dist - avg);
 	}
 	sigma /= rawDiscreteData.size();
@@ -314,7 +364,7 @@ void initialize(int argc, char **argv) {
 		*i = 0;
 
 	for (auto i = rawDiscreteData.begin(); i != rawDiscreteData.end(); ++i) {
-		int dist = abs(i->x - discreteQuery.x) + abs(i->y - discreteQuery.y);
+		int dist = (*i - discreteQuery).normL1();
 		int bucket = (dist - avg) / ((sigma+2)/3) + 10;
 
 		if (bucket > 18)
@@ -331,7 +381,7 @@ void initialize(int argc, char **argv) {
 		++bucket;
 	}
 
-	p = Primes::find_prime_bigger_than(2*(maxX + maxY));
+	p = Primes::find_prime_bigger_than(resolutionInt.normL1());
 
 //	p = 2;
 	r = 1;

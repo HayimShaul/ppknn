@@ -4,7 +4,7 @@
 #include <vector>
 #include <helib_number.h>
 
-#include "point2d.h"
+#include "point.h"
 
 extern long L;
 extern long p;
@@ -13,11 +13,11 @@ extern long r;
 extern int thread_num;
 extern int keySize;
 
-extern std::vector<Point2D<int> > rawDiscreteData;
+extern std::vector<Point<int> > rawDiscreteData;
 extern std::vector<int> rawDataClasses;
 extern bool measureAccuracy;
 
-extern Point2D<int> discreteQuery;
+extern Point<int> discreteQuery;
 
 void initialize(int argc, char **argv);
 

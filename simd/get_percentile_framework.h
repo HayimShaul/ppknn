@@ -316,17 +316,17 @@ void multithreaded_averages(Distances<Number, NumberBits> &_x, Number &avg, Numb
 
 inline float sqr(float x) { return x*x; }
 
-void print_histogram(const std::vector<Point2D<int> > &sites, const std::vector<int> &classes, const Point2D<int> &query) {
+void print_histogram(const std::vector<Point<int> > &sites, const std::vector<int> &classes, const Point<int> &query) {
 	int avg = 0;
 	for (auto i = sites.begin(); i != sites.end(); ++i) {
-		int dist = abs(i->x - query.x) + abs(i->y - query.y);
+		int dist = ((*i) - query).normL1();
 		avg += dist;
 	}
 	avg /= sites.size();
 
 	int sigma = 0;
 	for (auto i = sites.begin(); i != sites.end(); ++i) {
-		int dist = abs(i->x - query.x) + abs(i->y - query.y);
+		int dist = ((*i) - query).normL1();
 		sigma += (dist - avg) * (dist - avg);
 	}
 	sigma /= sites.size();
@@ -347,7 +347,7 @@ void print_histogram(const std::vector<Point2D<int> > &sites, const std::vector<
 
 	int i_site = 0;
 	for (auto i = sites.begin(); i != sites.end(); ++i, ++i_site) {
-		int dist = abs(i->x - query.x) + abs(i->y - query.y);
+		int dist = ((*i) - query).normL1();
 		int bucket = (dist - avg) / ((sigma+2)/3) + 10;
 
 		if (bucket > 18)
@@ -368,12 +368,12 @@ void print_histogram(const std::vector<Point2D<int> > &sites, const std::vector<
 	}
 }
 
-int real_knn_classifier(const std::vector<Point2D<int> > &sites, const std::vector<int> &classes, const Point2D<int> &query, int k = -1) {
+int real_knn_classifier(const std::vector<Point<int> > &sites, const std::vector<int> &classes, const Point<int> &query, int k = -1) {
 	print_histogram(sites, classes, query);
 
 	std::vector<float> distances;
 	for (auto i_sites = sites.begin(); i_sites != sites.end(); ++i_sites) {
-		float dist = sqr((*i_sites).x - query.x) + sqr((*i_sites).y - query.y);
+		float dist = (*i_sites - query).normL2sqr();
 		distances.push_back(dist);
 	}
 	std::sort(distances.begin(), distances.end());
@@ -386,7 +386,7 @@ int real_knn_classifier(const std::vector<Point2D<int> > &sites, const std::vect
 	int classZero = 0;
 
 	for (unsigned int i_sites = 0; i_sites < sites.size(); ++i_sites) {
-		float dist = sqr(sites[i_sites].x - query.x) + sqr(sites[i_sites].y - query.y);
+		float dist = (sites[i_sites] - query).normL2sqr();
 		if (dist < threshold) {
 			if (classes[i_sites] == 0)
 				++classZero;
@@ -400,7 +400,7 @@ int real_knn_classifier(const std::vector<Point2D<int> > &sites, const std::vect
 	}
 	int counted = classZero + classOne;
 	for (unsigned int i_sites = 0; i_sites < sites.size(); ++i_sites) {
-		float dist = sqr(sites[i_sites].x - query.x) + sqr(sites[i_sites].y - query.y);
+		float dist = (sites[i_sites] - query).normL2sqr();
 		if ((dist == threshold) && (counted < k)) {
 			if (classes[i_sites] == 0) {
 				++classZero;
@@ -426,7 +426,7 @@ bool OK = true;
 int MAX_CANDIDATES = -1;
 
 template<class Number, class NumberBits>
-void secure_knn_classifier_gaussian(const std::vector<Point2D<int> > &sites, const std::vector<int> &classes, const Point2D<int> &query, std::vector<int> &classZeroCountVector, std::vector<int> &classOneCountVector) {
+void secure_knn_classifier_gaussian(const std::vector<Point<int> > &sites, const std::vector<int> &classes, const Point<int> &query, std::vector<int> &classZeroCountVector, std::vector<int> &classOneCountVector) {
 
 	std::cout << "Starting classifier KNN" << std::endl;
 
@@ -533,7 +533,7 @@ void secure_knn_classifier_gaussian(const std::vector<Point2D<int> > &sites, con
 		int realAvg = 0;
 		int realAvgSqr = 0;
 		for (auto i = sites.begin(); i != sites.end(); ++i) {
-			int dist = abs((*i).x - query.x) + abs((*i).y - query.y);
+			int dist = ((*i) - query).normL1();
 			realAvg += dist;
 			realAvgSqr += dist*dist;
 		}
@@ -661,7 +661,7 @@ int avgIterations = 0;
 int RETRIES = 5;
 
 template<class Number, class NumberBits>
-int secure_knn_classifier(const std::vector<Point2D<int> > &sites, const std::vector<int> &classes, const Point2D<int> &query) {
+int secure_knn_classifier(const std::vector<Point<int> > &sites, const std::vector<int> &classes, const Point<int> &query) {
 	std::vector<int> classZeroCount;
 	std::vector<int> classOneCount;
 
@@ -705,7 +705,7 @@ int secure_knn_classifier(const std::vector<Point2D<int> > &sites, const std::ve
 }
 
 template<class Number, class NumberBits>
-void test_secure_knn_classifier(const std::vector<Point2D<int> > &sites, const std::vector<int> &classes) {
+void test_secure_knn_classifier(const std::vector<Point<int> > &sites, const std::vector<int> &classes) {
 	int match = 0;
 	int mismatch = 0;
 	int secClassificationFailed = 0;
@@ -718,7 +718,7 @@ void test_secure_knn_classifier(const std::vector<Point2D<int> > &sites, const s
 
 	for (unsigned int i_query = 0; i_query < sites.size(); ++i_query) {
 
-		std::vector<Point2D<int> > sub_sites;
+		std::vector<Point<int> > sub_sites;
 		std::vector<int> sub_classes;
 		for (unsigned int i_copy = 0; i_copy < sites.size(); ++i_copy) {
 			if (i_copy != i_query) {
@@ -786,7 +786,7 @@ void test_secure_knn_classifier(const std::vector<Point2D<int> > &sites, const s
 
 }
 
-void test_kish_classifier(const std::vector<Point2D<int> > &sites, const std::vector<int> &classes) {
+void test_kish_classifier(const std::vector<Point<int> > &sites, const std::vector<int> &classes) {
 	unsigned int MIN_K = sites.size() * 0.02;
 	unsigned int MAX_K = MIN_K + 1;
 
@@ -800,7 +800,7 @@ void test_kish_classifier(const std::vector<Point2D<int> > &sites, const std::ve
 		int knn_real = 0;
 
 		for (unsigned int i_query = 0; i_query < sites.size(); ++i_query) {
-			std::vector<Point2D<int> > sub_sites;
+			std::vector<Point<int> > sub_sites;
 			std::vector<int> sub_classes;
 			std::set<int> exclude;
 			exclude.insert(i_query);

@@ -11,12 +11,12 @@
 template<class Number, class NumberBits>
 class Distances {
 public:
-	typedef std::vector<Point2D<int> >  Sites;
+	typedef std::vector<Point<int> >  Sites;
 
 private:
 	const Sites &_sites;
 	const std::vector<int> _classes;
-	Point2D<int> _query;
+	Point<int> _query;
 	std::map<int, std::string> _cache;
 
 	static unsigned int simd_factor() {
@@ -30,8 +30,8 @@ private:
 	}
 
 public:
-	Distances(const Sites &sites, const Point2D<int> &q, ThreadPool *threads = NULL) : _sites(sites), _query(q) {}
-	Distances(const Sites &sites, const std::vector<int> &classes, const Point2D<int> &q, ThreadPool *threads = NULL) : _sites(sites), _classes(classes), _query(q) {}
+	Distances(const Sites &sites, const Point<int> &q, ThreadPool *threads = NULL) : _sites(sites), _query(q) {}
+	Distances(const Sites &sites, const std::vector<int> &classes, const Point<int> &q, ThreadPool *threads = NULL) : _sites(sites), _classes(classes), _query(q) {}
 
 	unsigned int size() const { return _sites.size(); }
 	Number operator[] (unsigned int at) {
@@ -65,8 +65,8 @@ public:
 		ret.resize(Number::simd_factor());
 		for (unsigned int i = 0; i < Number::simd_factor(); ++i)
 			if ((i < simd_factor()) && (_sites.size() > at + i)) {
-				Point2D<int> dist = _query - _sites[at + i];
-				ret[i] = abs(dist.x) + abs(dist.y);
+				Point<int> dist = _query - _sites[at + i];
+				ret[i] = dist.normL1();
 			} else
 				ret[i] = 0;
 		return ret;
@@ -82,52 +82,38 @@ public:
 			return ret;
 		}
 
-		std::vector<long int> xSite(Number::simd_factor());
-		std::vector<long int> ySite(Number::simd_factor());
-
-		std::vector<long int> xQuery(Number::simd_factor());
-		std::vector<long int> yQuery(Number::simd_factor());
-
-		unsigned int i = 0;
-		while ((i < simd_factor()) && (i + at < _sites.size())) {
-			xSite[i] = _sites[i + at].x;
-			ySite[i] = _sites[i + at].y;
-			xQuery[i] = _query.x;
-			yQuery[i] = _query.y;
-			++i;
-		}
-		while (i < Number::simd_factor()) {
-			xSite[i] = 0;
-			ySite[i] = 0;
-			xQuery[i] = 0;
-			yQuery[i] = 0;
-			++i;
-		}
-
-
 		Number ret;
+		bool ret_set = false;
+		for (unsigned int i_coor = 0; i_coor < _sites[0].dim(); ++i_coor) {
+			std::vector<long int> xSite(Number::simd_factor());
+			std::vector<long int> xQuery(Number::simd_factor());
 
-		{
-			Number xSiteEnc(xSite);
-			NumberBits xSiteBitsEnc(xSite);
+			unsigned int i = 0;
+			while ((i < simd_factor()) && (i + at < _sites.size())) {
+				xSite[i] = _sites[i + at][i_coor];
+				xQuery[i] = _query[i_coor];
+				++i;
+			}
+			while (i < Number::simd_factor()) {
+				xSite[i] = 0;
+				xQuery[i] = 0;
+				++i;
+			}
 
-			Number xQueryEnc(xQuery);
-			NumberBits xQueryBitsEnc(xQuery);
+			{
+				Number xSiteEnc(xSite);
+				NumberBits xSiteBitsEnc(xSite);
 
-			ret = (xSiteEnc - xQueryEnc) * ((xQueryBitsEnc < xSiteBitsEnc)*2 - 1);
+				Number xQueryEnc(xQuery);
+				NumberBits xQueryBitsEnc(xQuery);
+
+				if (!ret_set)
+					ret = (xSiteEnc - xQueryEnc) * ((xQueryBitsEnc < xSiteBitsEnc)*2 - 1);
+				else
+					ret += (xSiteEnc - xQueryEnc) * ((xQueryBitsEnc < xSiteBitsEnc)*2 - 1);
+				ret_set = true;
+			}
 		}
-
-
-		{
-			Number ySiteEnc(ySite);
-			NumberBits ySiteBitsEnc(ySite);
-
-			Number yQueryEnc(yQuery);
-			NumberBits yQueryBitsEnc(yQuery);
-
-			ret += (ySiteEnc - yQueryEnc) * ((yQueryBitsEnc < ySiteBitsEnc)*2 - 1);
-		}
-
 
 
 //		NumberBits retBits;

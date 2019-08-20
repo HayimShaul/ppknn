@@ -15,8 +15,8 @@ public:
 
 	unsigned int dim() const { return _coordinate.size(); }
 	void dim(unsigned int d) { _coordinate.resize(d); }
-	Number &operator[](int i) { assert(i < dim()); return _coordinate[i]; }
-	const Number &operator[](int i) const { assert(i < dim()); return _coordinate[i]; }
+	Number &operator[](unsigned int i) { assert(i < dim()); return _coordinate[i]; }
+	const Number &operator[](unsigned int i) const { assert(i < dim()); return _coordinate[i]; }
 
 	bool operator==(const Point &a) const {
 		assert(_coordinate.size() == a._coordinate.size());

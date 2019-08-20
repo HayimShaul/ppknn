@@ -242,6 +242,13 @@ void initialize(int argc, char **argv) {
 
 	read_classifier_data(fname);
 
+	auto maxit = std::max_element(rawDataClasses.begin(), rawDataClasses.end());
+	if (maxit == rawDataClasses.end()) {
+		std::cerr << "cannot find max element" << std::endl;
+		exit(1);
+	}
+	Configuration::classNumber = *maxit + 1;
+
 	if (setResolutionMethod == SetResolutionMethod::ByP) {
 		resolutionInt.dim( rawData[0].dim() );
 		resolutionFloat.dim( rawData[0].dim() );
@@ -254,6 +261,7 @@ void initialize(int argc, char **argv) {
 		for (unsigned int i = 0; i < rawData[0].dim(); ++i) {
 			resolutionFloat[i] = resolutionInt[i] = 100;
 		}
+	} else if (setResolutionMethod == SetResolutionMethod::ByUser) {
 	}
 
 

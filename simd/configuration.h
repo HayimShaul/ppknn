@@ -4,6 +4,7 @@
 class Configuration {
 public:
 	static unsigned int cv_k_fold;
+	static unsigned int classNumber;
 };
 
 #endif

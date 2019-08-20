@@ -155,6 +155,15 @@ int popcnt(int i) {
 	return i;
 }
 
+
+int argmax(const std::vector<int> &v) {
+	int a = 0;
+	for (unsigned int i = 1; i < v.size(); ++i)
+		if (v[i] > v[a])
+			a = i;
+	return a;
+}
+
 //template<class Number>
 //Number fold_power_2(Number n, int simd_factor) {
 //#	ifdef DONT_USE_SIMD
@@ -382,51 +391,39 @@ int real_knn_classifier(const std::vector<Point<int> > &sites, const std::vector
 		k = distances.size() * 0.02;
 	float threshold = distances[k];
 
-	int classOne = 0;
-	int classZero = 0;
+	std::vector<int> classCount(Configuration::classNumber, 0);
 
 	for (unsigned int i_sites = 0; i_sites < sites.size(); ++i_sites) {
 		float dist = (sites[i_sites] - query).normL2sqr();
 		if (dist < threshold) {
-			if (classes[i_sites] == 0)
-				++classZero;
-			else if (classes[i_sites] == 1)
-				++classOne;
-			else {
-				std::cerr << "Error: classes should be 0s of 1s\n";
-				exit(1);
-			}
+			++classCount[ classes[i_sites] ];
 		}
 	}
-	int counted = classZero + classOne;
+//	int counted = std::accumulate(classCount.begin(), classCount.end());
 	for (unsigned int i_sites = 0; i_sites < sites.size(); ++i_sites) {
 		float dist = (sites[i_sites] - query).normL2sqr();
-		if ((dist == threshold) && (counted < k)) {
-			if (classes[i_sites] == 0) {
-				++classZero;
-				++counted;
-			} else if (classes[i_sites] == 1) {
-				++classOne;
-				++counted;
-			} else {
-				std::cerr << "Error: classes should be 0s of 1s\n";
-				exit(1);
-			}
+		if ((dist == threshold) && (std::accumulate(classCount.begin(), classCount.end(), 0) < k)) {
+			++classCount[ classes[i_sites] ];
 		}
 	}
 
-	std::cout << "real count of class 0: " << classZero << std::endl;
-	std::cout << "real count of class 1: " << classOne << std::endl;
+	int maxClass = 0;
+	for (unsigned int i = 0; i < classCount.size(); ++i) {
+		std::cout << "real count of class " << i << ": " << classCount[i] << std::endl;
+		if (classCount[maxClass] < classCount[i])
+			maxClass = i;
+	}
 
-	return (classZero > classOne) ? 0 : 1;
+	return maxClass;
 }
 
 
 bool OK = true;
 int MAX_CANDIDATES = -1;
 
+// classesCountVector[i_candidate][i_class] = how many neighbors of class i_class we found for candidate i_candidate
 template<class Number, class NumberBits>
-void secure_knn_classifier_gaussian(const std::vector<Point<int> > &sites, const std::vector<int> &classes, const Point<int> &query, std::vector<int> &classZeroCountVector, std::vector<int> &classOneCountVector) {
+void secure_knn_classifier_gaussian(const std::vector<Point<int> > &sites, const std::vector<int> &classes, const Point<int> &query, std::vector<std::vector<int> > &classesCountVector) {
 
 	std::cout << "Starting classifier KNN" << std::endl;
 
@@ -569,47 +566,47 @@ void secure_knn_classifier_gaussian(const std::vector<Point<int> > &sites, const
 	////////////////////////////////////
 
 
-	std::vector<Number> classOneCountEnc(thresholdCandidates.size());
-	std::vector<Number> classZeroCountEnc(thresholdCandidates.size());
-
+	std::vector< std::vector<Number> > classCountEnc(thresholdCandidates.size());
 	for (unsigned int i_candidate = 0; i_candidate < thresholdCandidates.size(); ++i_candidate) {
-		classOneCountEnc[i_candidate] = 0;
-		classZeroCountEnc[i_candidate] = 0;
+		classCountEnc[i_candidate].resize(Configuration::classNumber, 0);
 	}
 
 	auto dist = distances.begin();
 	while (dist != distances.end()) {
 		Number xi = dist.getDistances();
-		std::vector<long int> classZero = dist.getClass(0);
-		std::vector<long int> classOne = dist.getClass(1);
 
 		{
 			for (unsigned int i_candidate = 0; i_candidate < thresholdCandidates.size(); ++i_candidate) {
 				global_timer.start();
 
 				Number knnEnc = ComparePoly<Number>(xi) < thresholdCandidates[i_candidate];
-				Number knnClassOneEnc = knnEnc * classOne;
-				Number knnClassZeroEnc = knnEnc * classZero;
 
-				classOneCountEnc[i_candidate] += knnClassOneEnc;
-				classZeroCountEnc[i_candidate] += knnClassZeroEnc;
+				for (unsigned int i_class = 0; i_class < Configuration::classNumber; ++i_class) {
+					Number knnClassEnc = knnEnc * dist.getClass(i_class);
+					classCountEnc[i_candidate][i_class] += knnClassEnc;
+				}
+
 				std::cout << global_timer.end("count classes for one candidate for one batch of points");
 
 				// debugging
-				std::cout << "The KNN indicator vector for candidate " << thresholdCandidates[i_candidate].to_int() << std::endl;
-				std::vector<long int> knn = knnEnc.to_vector();
-				std::vector<long int> knnClassZero = knnClassZeroEnc.to_vector();
-				std::vector<long int> knnClassOne = knnClassOneEnc.to_vector();
-				std::vector<long int> plaintextDistances = dist.getPlaintextDistances();
-				std::vector<long int> plaintextClasses = dist.getPlaintextClasses();
-				for (unsigned int i = 0; (i < knn.size()) && (i < sites.size()); ++i) {
-					std::cout << dist.loc() << ", " << i << ") " << "x = " << knn[i] << "   dist = " << plaintextDistances[i] << "    class = " << plaintextClasses[i]
-						<< " class zero: " << knnClassZero[i] <<  " class one: " << knnClassOne[i] << std::endl;
-					if ((knnClassZero[i] != 0) && (knnClassZero[i] != 1))
-						OK = false;
-					if ((knnClassOne[i] != 0) && (knnClassOne[i] != 1))
-						OK = false;
-				}
+//				std::cout << "The KNN indicator vector for candidate " << thresholdCandidates[i_candidate].to_int() << std::endl;
+//				std::vector<long int> knn = knnEnc.to_vector();
+//				std::vector<std::vector<long int> > knnClasses(Configuration::classNumber);
+//				for (unsigned int i_class = 0; i_class < Configuration::classNumber; ++i_class)
+//					knnClasses[i_class] = knnClassEnc[i_class].to_vector();
+//				std::vector<long int> plaintextDistances = dist.getPlaintextDistances();
+//				std::vector<long int> plaintextClasses = dist.getPlaintextClasses();
+//				for (unsigned int i = 0; (i < knn.size()) && (i < sites.size()); ++i) {
+//					std::cout << dist.loc() << ", " << i << ") " << "x = " << knn[i] << "   dist = " << plaintextDistances[i] << "    class = " << plaintextClasses[i];
+//					int numberOfClasses = 0;
+//					for (unsigned int i_class = 0; i_class < Configuration::classNumber; ++i_class) {
+//						std::cout << " class " << i_class << ": " << knnClass[i_candidate][i];
+//						numberOfClasses += knnClass[i_class][i];
+//					}
+//					std::cout << std::endl;
+//					if (numberOfClasses != 1)
+//						OK = false;
+//				}
 			}
 		}
 
@@ -621,36 +618,33 @@ void secure_knn_classifier_gaussian(const std::vector<Point<int> > &sites, const
 	if (OK)
 		std::cout << "test is OK" << std::endl;
 
-	classZeroCountVector.resize(thresholdCandidates.size());
-	classOneCountVector.resize(thresholdCandidates.size());
+
+	classesCountVector.resize(thresholdCandidates.size());
 	for (unsigned int i_candidate = 0; i_candidate < thresholdCandidates.size(); ++i_candidate) {
-		std::vector<long int> classOneCountV = classOneCountEnc[i_candidate].to_vector();
-		std::vector<long int> classZeroCountV = classZeroCountEnc[i_candidate].to_vector();
+		std::cout << "Candidate " << i_candidate << std::endl;
 
-		std::cout << "class zero neighbors:" << std::endl;
-		int classZeroCount = 0;
-		for (unsigned int n = 0; n < classZeroCountV.size(); ++n) {
-			std::cout << classZeroCountV[n] << std::endl;
-			classZeroCount += classZeroCountV[n];
+		classesCountVector[i_candidate].resize(Configuration::classNumber);
+		for (unsigned int i_class = 0; i_class < Configuration::classNumber; ++i_class) {
+			classesCountVector[i_candidate][i_class] = 0;
+			std::vector<long int> classCountV = classCountEnc[i_candidate][i_class].to_vector();
+
+			std::cout << "   candidate " << i_candidate << " class " << i_class << " neighbors:" << std::endl;
+			for (unsigned int n = 0; n < classCountV.size(); ++n) {
+				std::cout << "       " << classCountV[n] << std::endl;
+				classesCountVector[i_candidate][i_class] += classCountV[n];
+			}
 		}
-
-		std::cout << "class one neighbors:" << std::endl;
-		int classOneCount = 0;
-		for (unsigned int n = 0; n < classOneCountV.size(); ++n) {
-			std::cout << classOneCountV[n] << std::endl;
-			classOneCount += classOneCountV[n];;
-		}
-
-		std::cout << "candidate " << i_candidate << " secure count of class 0: " << classZeroCount << std::endl;
-		std::cout << "candidate " << i_candidate << " secure count of class 1: " << classOneCount << std::endl;
-		classZeroCountVector[i_candidate] = classZeroCount;
-		classOneCountVector[i_candidate] = classOneCount;
 	}
 
 
-//	int secureKnnClassifier = (classZeroCount > classOneCount) ? 0 : 1;
-
-
+	std::cout << " Total of:" << std::endl;
+	for (unsigned int i_candidate = 0; i_candidate < thresholdCandidates.size(); ++i_candidate) {
+		for (unsigned int i_class = 0; i_class < Configuration::classNumber; ++i_class) {
+			for (unsigned int i_class = 0; i_class < Configuration::classNumber; ++i_class) {
+				std::cout << "candidate " << i_candidate << " class " << i_class << ": " << classesCountVector[i_candidate][i_class] << " neighbors" << std::endl;
+			}
+		}
+	}
 
 	print_stat(-1);
 //	return secureKnnClassifier;
@@ -662,41 +656,38 @@ int RETRIES = 5;
 
 template<class Number, class NumberBits>
 int secure_knn_classifier(const std::vector<Point<int> > &sites, const std::vector<int> &classes, const Point<int> &query) {
-	std::vector<int> classZeroCount;
-	std::vector<int> classOneCount;
+	std::vector<std::vector<int> > classesCountVector;
 
 	for (int i = 0; i < RETRIES; ++i) {
 		++avgIterations;
-		classZeroCount.resize(0);
-		classOneCount.resize(0);
-		secure_knn_classifier_gaussian<Number, NumberBits>(sites, classes, query, classZeroCount, classOneCount);
+		classesCountVector.resize(0);
+		secure_knn_classifier_gaussian<Number, NumberBits>(sites, classes, query, classesCountVector);
 
-		for (unsigned int sigmaFactor = 0; sigmaFactor < classOneCount.size(); ++sigmaFactor) {
-			int one = classOneCount[sigmaFactor];
-			int zero = classZeroCount[sigmaFactor];
-			std::cout << "Iteration " << i << " sigmaFactor " << sigmaFactor << " one=" << one << "  zero=" << zero << std::endl;
+		for (unsigned int i_candidate = 0; i_candidate < classesCountVector.size(); ++i_candidate) {
+			std::cout << "Iteration " << i << " candidate " << i_candidate << ":" << std::endl;
+			int totalCount = std::accumulate(classesCountVector[i_candidate].begin(), classesCountVector[i_candidate].end(), 0);
 
 			float threshold = 0.05 * sites.size();
 
-			if (one + zero < 0.5 * threshold) {
+			if (totalCount < 0.5 * threshold) {
 				std::cout << "Too little neighbors" << std::endl;
 				continue;
 			}
 			// Deal with the case where we have a small count of 1 but huge amount of 0
-			if (one + zero > 2 * threshold) {
-				if (one < threshold) {
-					std::cout << "enough neighbors, and 1 count is very small. Classifying as 0" << std::endl;
-					return 0;
+			if (totalCount > 2 * threshold) {
+				for (unsigned int i_class = 0; i_class < classesCountVector[i_candidate].size(); ++i_class) {
+					// If we can reduce the "neighbors sphere" until we are left with 2*threshold s.t. one class has more than treshold neighbors
+					if (totalCount - classesCountVector[i_candidate][i_class] < threshold) {
+						std::cout << "too many neighbors, but class " << i_class << " is considerably big. Classifying as " << i_class << std::endl;
+						return i_class;
+					}
 				}
-				if (zero < threshold) {
-					std::cout << "enough neighbors, and 0 count is very small. Classifying as 1" << std::endl;
-					return 1;
-				}
+
 				std::cout << "Too many neighbors" << std::endl;
 				continue;
 			}
 			std::cout << "enough neighbors. Classifying by majority" << std::endl;
-			return (one > zero) ? 1 : 0;
+			return argmax(classesCountVector[i_candidate]);
 		}
 	}
 
@@ -795,9 +786,12 @@ void test_kish_classifier(const std::vector<Point<int> > &sites, const std::vect
 //		int correct[2] = {0};
 //		int incorrect[2] = {0};
 
-		int knn = 0;
-		int real = 0;
-		int knn_real = 0;
+		std::vector<float> f1Scores(Configuration::classNumber, 0);
+		std::vector<unsigned int> truePositives(Configuration::classNumber, 0);
+		std::vector<unsigned int> falsePositives(Configuration::classNumber, 0);
+		std::vector<unsigned int> trueNegatives(Configuration::classNumber, 0);
+		std::vector<unsigned int> falseNegatives(Configuration::classNumber, 0);
+		std::vector<unsigned int> weights(Configuration::classNumber, 0);
 
 		for (unsigned int i_query = 0; i_query < sites.size(); ++i_query) {
 			std::vector<Point<int> > sub_sites;
@@ -817,17 +811,31 @@ void test_kish_classifier(const std::vector<Point<int> > &sites, const std::vect
 
 			int knnClass = real_knn_classifier(sub_sites, sub_classes, sites[i_query], k);
 
-			if (knnClass)
-				++knn;
-			if (classes[i_query])
-				++real;
-			if (knnClass && classes[i_query])
-				++knn_real;
+			++weights[classes[i_query]];
+			for (int i_class = 0; i_class < (int)Configuration::classNumber; ++i_class) {
+				if ((knnClass == i_class) && (classes[i_query] == i_class))
+					++truePositives[i_class];
+				if ((knnClass != i_class) && (classes[i_query] == i_class))
+					++falseNegatives[i_class];
+				if ((knnClass == i_class) && (classes[i_query] != i_class))
+					++falsePositives[i_class];
+				if ((knnClass != i_class) && (classes[i_query] != i_class))
+					++trueNegatives[i_class];
+			}
 		}
 
-		std::cout << "KNN k = " << k << std::endl;
+		std::vector<float> precision(Configuration::classNumber, 0);
+		std::vector<float> recall(Configuration::classNumber, 0);
 
-		std::cout << "KISH OUTPUT: " << k << " Dice score1: " << (2.0*knn_real / (knn + knn_real)) << std::endl;
+		std::cout << "KNN k = " << k << std::endl;
+		for (unsigned int i_class = 0; i_class < Configuration::classNumber; ++i_class) {
+			precision[i_class] = 1.0 - (1.0 * falsePositives[i_class]) / (truePositives[i_class] + falsePositives[i_class]);
+			recall[i_class] = 1.0 - (1.0 * falseNegatives[i_class]) / (truePositives[i_class] + falseNegatives[i_class]);
+			f1Scores[i_class] = 2.0 * precision[i_class] * recall[i_class] / (precision[i_class] + recall[i_class]);
+			std::cout << "KISH OUTPUT: " << k << " Dice score " << i_class << ": " << f1Scores[i_class] << std::endl;
+		}
+
+
 	}
 
 	if (OK)

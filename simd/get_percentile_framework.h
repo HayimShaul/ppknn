@@ -421,9 +421,92 @@ int real_knn_classifier(const std::vector<Point<int> > &sites, const std::vector
 bool OK = true;
 int MAX_CANDIDATES = -1;
 
+int foldMod(const std::vector<long int> &a, int mod) {
+	int ret = 0;
+	for (unsigned int i = 0; i < a.size(); ++i) {
+		ret = (ret + a[i]) % mod;
+	}
+	return ret;
+}
+
+std::vector<long int> random_vector(unsigned int size, long mod) {
+	std::vector<long int> ret(size);
+	for (unsigned int i = 0; i < size; ++i)
+		ret[i] = random() % mod;
+	return ret;
+}
+
+// This function masks the classCount ciphertext vector, sends the masked version to the client who then decrypts folds, encrypts again and sends back to the server
+// The server then removes the mask
+// classCountEnc has the structure classCountEnc[i_candidate][i_class] = 1/0 with SIMD slot s, if site s has class i_class for candidate i_candidate
+// foldedClassCountEnc has the structure foldedClassCountEnc[i_class] = n with SIMD slot s, then class i_class and candidate s has n neighbors
+template<class Number>
+void maskFoldRecrypt(std::vector<std::vector<Number> > &classCountEnc, std::vector<Number> &foldedClassCountEnc) {
+	unsigned int candidateNum = classCountEnc.size();
+	unsigned int classNum = classCountEnc[0].size();
+
+	// mask
+	std::vector<std::vector<std::vector<long int> > > mask;
+	mask.resize(candidateNum);
+	for (unsigned int i_candidate = 0; i_candidate < candidateNum; ++i_candidate) {
+		mask[i_candidate].resize(classNum);
+		for (unsigned int i_class = 0; i_class < classNum; ++i_class)
+			mask[i_candidate][i_class] = random_vector(Number::simd_factor(), Number::get_global_ring_size());
+	}
+
+	for (unsigned int i_candidate = 0; i_candidate < candidateNum; ++i_candidate) {
+		for (unsigned int i_class = 0; i_class < classNum; ++i_class)
+			classCountEnc[i_candidate][i_class] += mask[i_candidate][i_class];
+	}
+
+	//////////////////////////////////////////////
+	// send the masked classCountEnc to the client
+	//////////////////////////////////////////////
+
+	// decrypt fold and encrypt the classCount vector
+	std::vector<std::vector<long int> > classCount;
+	classCount.resize(candidateNum);
+	for (unsigned int i_candidate = 0; i_candidate < candidateNum; ++i_candidate) {
+		classCount[i_candidate].resize(classNum);
+		for (unsigned int i_class = 0; i_class < classNum; ++i_class) {
+			// decrypt
+			std::vector<long int> v = classCountEnc[i_candidate][i_class].to_vector();
+			// fold
+			classCount[i_candidate][i_class] = foldMod(v, Number::get_global_ring_size());
+		}
+	}
+	// encrypt
+	foldedClassCountEnc.resize(classNum);
+	for (unsigned int i_class = 0; i_class < classNum; ++i_class) {
+		std::vector<long int> v(candidateNum);
+		for (unsigned int i_candidate; i_candidate < candidateNum; ++i_candidate)
+			v[i_candidate] = classCount[i_candidate][i_class];
+		foldedClassCountEnc[i_class].from_vector(v);
+	}
+
+	//////////////////////////////////////////////
+	// send the masked classCountEnc to the client
+	//////////////////////////////////////////////
+
+	// fold and transpose the mask matrix
+	std::vector<std::vector<long int> > foldedMask;
+	foldedMask.resize(classNum);
+	for (unsigned int i_class = 0; i_class < classNum; ++i_class) {
+		foldedMask[i_class].resize(candidateNum, 0);
+		for (unsigned int i_candidate = 0; i_candidate < candidateNum; ++i_candidate) {
+			foldedMask[i_class][i_candidate] = foldMod(mask[i_candidate][i_class], Number::get_global_ring_size());
+		}
+	}
+
+	// unmask
+	for (unsigned int i_class = 0; i_class < classNum; ++i_class) {
+		foldedClassCountEnc[i_class] -= foldedMask[i_class];
+	}
+}
+
 // classesCountVector[i_candidate][i_class] = how many neighbors of class i_class we found for candidate i_candidate
 template<class Number, class NumberBits>
-void secure_knn_classifier_gaussian(const std::vector<Point<int> > &sites, const std::vector<int> &classes, const Point<int> &query, std::vector<std::vector<int> > &classesCountVector) {
+void old_secure_knn_classifier_gaussian(const std::vector<Point<int> > &sites, const std::vector<int> &classes, const Point<int> &query, std::vector<std::vector<int> > &classesCountVector) {
 
 	std::cout << "Starting classifier KNN" << std::endl;
 
@@ -650,45 +733,308 @@ void secure_knn_classifier_gaussian(const std::vector<Point<int> > &sites, const
 //	return secureKnnClassifier;
 }
 
+// classesCountVector[i_candidate][i_class] = how many neighbors of class i_class we found for candidate i_candidate
+template<class Number, class NumberBits>
+int secure_knn_classifier_gaussian(const std::vector<Point<int> > &sites, const std::vector<int> &classes, int k, const Point<int> &query) {
+
+	std::cout << "Starting classifier KNN" << std::endl;
+
+	Distances<Number, NumberBits> distances(sites, classes, query);
+
+	Number avgValue;
+	Number avgSqrValue;
+
+	////////////////////////////////////
+	// Start computing average and average of squares
+	////////////////////////////////////
+
+	Number avgEnc;
+	Number avgSqrMsdEnc;
+	Number avgSqrLsdEnc;
+
+	{
+		AutoTakeTimes tt("computing averages");
+
+		global_timer.start();
+		multithreaded_averages<Number, NumberBits>(distances, avgEnc, avgSqrMsdEnc, avgSqrLsdEnc);
+		std::cout << global_timer.end("computing averages");
+	}
+
+
+	{
+		AutoTakeTimes tt("folding vectors");
+
+		global_timer.start();
+		avgEnc = fold(avgEnc, sites.size());
+		avgSqrMsdEnc = fold(avgSqrMsdEnc, sites.size());
+		avgSqrLsdEnc = fold(avgSqrLsdEnc, sites.size());
+		std::cout << global_timer.end("folding");
+	}
+
+
+	////////////////////////////////////
+	// End computing average and average of squares
+	////////////////////////////////////
+
+
+
+	////////////////////////////////////
+	// start computing threshold
+	////////////////////////////////////
+
+	std::vector<Number> thresholdCandidates;
+	{
+		ThreadPool threads;
+
+		global_timer.start();
+
+		Number avgLsdEnc = avgEnc * avgEnc;
+		Number avgMsdEnc;
+		{
+			AutoTakeTimes tt("computing avg sqaure");
+			SpecialPolynomials<Number>::square_msd_polynomial.compute(avgMsdEnc, avgEnc, &threads);
+		}
+
+		Number sigma;
+		{
+			AutoTakeTimes tt("computing sigma");
+			sigma = SpecialPolynomials<Number>::sqrt_msd_polynomial.compute( avgSqrMsdEnc - avgMsdEnc, &threads );
+			sigma += SpecialPolynomials<Number>::sqrt_polynomial.compute( avgSqrLsdEnc - avgLsdEnc, &threads );
+		}
+
+		long inv2 = power_mod(2, phi(Number::get_global_ring_size()) - 1, Number::get_global_ring_size());
+		std::cout << "2^{-1} mod " << Number::get_global_ring_size() << " = " << inv2 << std::endl;
+
+		{
+			{
+				Number threshold = avgEnc;
+				thresholdCandidates.push_back(threshold);
+			}
+			{
+				Number threshold = avgEnc - sigma;
+				thresholdCandidates.push_back(threshold);
+			}
+			{
+//				Number threshold = avgEnc - sigma*2;
+				Number threshold = avgEnc - sigma - sigma;
+				thresholdCandidates.push_back(threshold);
+			}
+			{
+				Number threshold = avgEnc - sigma*inv2;
+				thresholdCandidates.push_back(threshold);
+			}
+			{
+				Number threshold = avgEnc - (sigma+1)*inv2;
+				thresholdCandidates.push_back(threshold);
+			}
+
+		}
+
+
+		std::cout << global_timer.end("compute threashold candidates");
+		if (MAX_CANDIDATES > 0)
+			thresholdCandidates.resize(MAX_CANDIDATES);
+
+
+
+
+
+		int realAvg = 0;
+		int realAvgSqr = 0;
+		for (auto i = sites.begin(); i != sites.end(); ++i) {
+			int dist = ((*i) - query).normL1();
+			realAvg += dist;
+			realAvgSqr += dist*dist;
+		}
+		realAvg /= sites.size();
+		realAvgSqr /= sites.size();
+
+		std::cout << "avg = " << avgEnc.to_int()  << "         (real = " << realAvg << ")" << std::endl;
+
+		std::cout << "avg^2 = " << (avgMsdEnc.to_int()*p + avgLsdEnc.to_int()) << "        (real = " << (realAvg*realAvg) << ")" << std::endl;
+		std::cout << "avg^2 / p = " << avgMsdEnc.to_int() <<  "            (real = " << (realAvg*realAvg / p) << ")" << std::endl;
+		std::cout << "avg^2 % p = " << avgLsdEnc.to_int() << "             (real = " << (realAvg*realAvg % p) << ")" << std::endl;
+
+		std::cout << "avgSqr = " << (avgSqrMsdEnc.to_int()*p + avgSqrLsdEnc.to_int()) << "          (real = " << realAvgSqr << ")" << std::endl;
+		std::cout << "avgSqr / p = " << avgSqrMsdEnc.to_int() << "        (real = " << (realAvgSqr / p) << ")" << std::endl;
+		std::cout << "avgSqr % p = " <<  avgSqrLsdEnc.to_int() << "        (real = " << (realAvgSqr % p) << ")" << std::endl;
+
+
+		std::cout << "sigma = sqrt_msd(" << (avgSqrMsdEnc - avgMsdEnc).to_int() << ") + " << "sqrt_lsd(" << (avgSqrLsdEnc - avgLsdEnc).to_int() << ")" << std::endl;
+		std::cout << "sigma = " << sigma.to_int() << "            (real = " << ::sqrt(-realAvg*realAvg + realAvgSqr) << ")" << std::endl;
+		for (unsigned int i_candidate = 0; i_candidate < thresholdCandidates.size(); ++i_candidate)
+			std::cout << "Threshold candidate " << i_candidate << " = " << thresholdCandidates[i_candidate].to_int() << std::endl;
+
+	}
+
+	////////////////////////////////////
+	// end computing threshold
+	////////////////////////////////////
+
+
+
+	////////////////////////////////////
+	// start counting classes
+	////////////////////////////////////
+
+
+	std::vector< std::vector<Number> > classCountEnc(thresholdCandidates.size());
+	for (unsigned int i_candidate = 0; i_candidate < thresholdCandidates.size(); ++i_candidate) {
+		classCountEnc[i_candidate].resize(Configuration::classNumber, 0);
+	}
+
+	auto dist = distances.begin();
+	while (dist != distances.end()) {
+		Number xi = dist.getDistances();
+
+		{
+			for (unsigned int i_candidate = 0; i_candidate < thresholdCandidates.size(); ++i_candidate) {
+				global_timer.start();
+
+				Number knnEnc = ComparePoly<Number>(xi) < thresholdCandidates[i_candidate];
+
+				for (unsigned int i_class = 0; i_class < Configuration::classNumber; ++i_class) {
+					Number knnClassEnc = knnEnc * dist.getClass(i_class);
+					classCountEnc[i_candidate][i_class] += knnClassEnc;
+				}
+
+				std::cout << global_timer.end("count classes for one candidate for one batch of points");
+
+				// debugging
+//				std::cout << "The KNN indicator vector for candidate " << thresholdCandidates[i_candidate].to_int() << std::endl;
+//				std::vector<long int> knn = knnEnc.to_vector();
+//				std::vector<std::vector<long int> > knnClasses(Configuration::classNumber);
+//				for (unsigned int i_class = 0; i_class < Configuration::classNumber; ++i_class)
+//					knnClasses[i_class] = knnClassEnc[i_class].to_vector();
+//				std::vector<long int> plaintextDistances = dist.getPlaintextDistances();
+//				std::vector<long int> plaintextClasses = dist.getPlaintextClasses();
+//				for (unsigned int i = 0; (i < knn.size()) && (i < sites.size()); ++i) {
+//					std::cout << dist.loc() << ", " << i << ") " << "x = " << knn[i] << "   dist = " << plaintextDistances[i] << "    class = " << plaintextClasses[i];
+//					int numberOfClasses = 0;
+//					for (unsigned int i_class = 0; i_class < Configuration::classNumber; ++i_class) {
+//						std::cout << " class " << i_class << ": " << knnClass[i_candidate][i];
+//						numberOfClasses += knnClass[i_class][i];
+//					}
+//					std::cout << std::endl;
+//					if (numberOfClasses != 1)
+//						OK = false;
+//				}
+			}
+		}
+
+		++dist;
+	}
+
+	// classCountEnc has the structure classCountEnc[i_candidate][i_class] = 1/0 with SIMD slot s, if site s has class i_class for candidate i_candidate
+	// foldedClassCountEnc has the structure foldedClassCountEnc[i_class] = n with SIMD slot s, then class i_class and candidate s has n neighbors
+	std::vector<Number> foldedClassCountEnc;
+	{
+		AutoTakeTimes("mask fold and recrypt");
+		maskFoldRecrypt(classCountEnc, foldedClassCountEnc);
+	}
+
+	std::vector<long int> vec1(Number::simd_factor(), 1);
+
+	Number classEnc;
+	{
+		AutoTakeTimes("compute Max");
+
+		Number totalCount = 0;
+		for (unsigned int i_class = 0; i_class < foldedClassCountEnc.size(); ++i_class)
+			totalCount += foldedClassCountEnc[i_class];
+
+		Number tooFew = ComparePoly<Number>(totalCount) < (k/2);
+		Number tooMany = ComparePoly<Number>(totalCount) > (2*k);
+
+
+		Number tooManyClass = 0;
+		 	// else if (totalCount > 2*k) 
+		for (unsigned int i_class = 0; i_class < foldedClassCountEnc.size(); ++i_class) {
+			tooManyClass += 
+				// If we can reduce the "neighbors sphere" until we are left with 2*k s.t. one class has more than treshold neighbors
+				(ComparePoly<Number>(totalCount - foldedClassCountEnc[i_class]) < k) * (1+i_class);
+		}
+
+
+		std::vector<Number> classIsMax(foldedClassCountEnc.size());
+		for (unsigned int i_class = 0; i_class < foldedClassCountEnc.size(); ++i_class) {
+std::cerr << "check that addConstant considers simd" << std::endl;
+			classIsMax[i_class] = (-tooFew + 1)*(i_class + 1);
+		}
+
+		for (unsigned int i_class = 0; i_class < foldedClassCountEnc.size(); ++i_class) {
+			for (unsigned int j_class = i_class + 1; j_class < foldedClassCountEnc.size(); ++j_class) {
+				Number isIBiggerJ = ComparePoly<Number>(foldedClassCountEnc[i_class] - foldedClassCountEnc[j_class]) < (2*k);
+				classIsMax[i_class] *= isIBiggerJ;
+				classIsMax[j_class] *= (-isIBiggerJ + 1);
+			}
+		}
+
+		Number inRangeClass = 0;
+		for (unsigned int i_class = 0; i_class < foldedClassCountEnc.size(); ++i_class) {
+			inRangeClass += classIsMax[i_class];
+		}
+
+		classEnc = tooMany*tooManyClass + (-tooMany+1)*inRangeClass;
+	}
+
+	print_stat(-1);
+
+	// Send to the user who decrypts and figures out the class
+
+	std::vector<long int> classVector = classEnc.to_vector();
+
+	int ret = -1;
+	for (unsigned int i_candidate = 0; i_candidate < classVector.size(); ++i_candidate) {
+		if ((classVector[i_candidate] != 0) && (ret != -1))
+			ret = classVector[i_candidate] - 1;
+	}
+
+	return ret;
+}
+
 
 int avgIterations = 0;
 int RETRIES = 5;
 
 template<class Number, class NumberBits>
 int secure_knn_classifier(const std::vector<Point<int> > &sites, const std::vector<int> &classes, const Point<int> &query) {
-	std::vector<std::vector<int> > classesCountVector;
+//	std::vector<std::vector<int> > classesCountVector;
 
+	int k = 0.05 * sites.size();
 	for (int i = 0; i < RETRIES; ++i) {
 		++avgIterations;
-		classesCountVector.resize(0);
-		secure_knn_classifier_gaussian<Number, NumberBits>(sites, classes, query, classesCountVector);
+//		classesCountVector.resize(0);
+		int prediction = secure_knn_classifier_gaussian<Number, NumberBits>(sites, classes, k, query);
+		if (prediction != -1)
+			return prediction;
 
-		for (unsigned int i_candidate = 0; i_candidate < classesCountVector.size(); ++i_candidate) {
-			std::cout << "Iteration " << i << " candidate " << i_candidate << ":" << std::endl;
-			int totalCount = std::accumulate(classesCountVector[i_candidate].begin(), classesCountVector[i_candidate].end(), 0);
-
-			float threshold = 0.05 * sites.size();
-
-			if (totalCount < 0.5 * threshold) {
-				std::cout << "Too little neighbors" << std::endl;
-				continue;
-			}
-			// Deal with the case where we have a small count of 1 but huge amount of 0
-			if (totalCount > 2 * threshold) {
-				for (unsigned int i_class = 0; i_class < classesCountVector[i_candidate].size(); ++i_class) {
-					// If we can reduce the "neighbors sphere" until we are left with 2*threshold s.t. one class has more than treshold neighbors
-					if (totalCount - classesCountVector[i_candidate][i_class] < threshold) {
-						std::cout << "too many neighbors, but class " << i_class << " is considerably big. Classifying as " << i_class << std::endl;
-						return i_class;
-					}
-				}
-
-				std::cout << "Too many neighbors" << std::endl;
-				continue;
-			}
-			std::cout << "enough neighbors. Classifying by majority" << std::endl;
-			return argmax(classesCountVector[i_candidate]);
-		}
+//		for (unsigned int i_candidate = 0; i_candidate < classesCountVector.size(); ++i_candidate) {
+//			std::cout << "Iteration " << i << " candidate " << i_candidate << ":" << std::endl;
+//			int totalCount = std::accumulate(classesCountVector[i_candidate].begin(), classesCountVector[i_candidate].end(), 0);
+//
+//			float threshold = 0.05 * sites.size();
+//
+//			if (totalCount < 0.5 * threshold) {
+//				std::cout << "Too little neighbors" << std::endl;
+//				continue;
+//			}
+//			// Deal with the case where we have a small count of 1 but huge amount of 0
+//			if (totalCount > 2 * threshold) {
+//				for (unsigned int i_class = 0; i_class < classesCountVector[i_candidate].size(); ++i_class) {
+//					// If we can reduce the "neighbors sphere" until we are left with 2*threshold s.t. one class has more than treshold neighbors
+//					if (totalCount - classesCountVector[i_candidate][i_class] < threshold) {
+//						std::cout << "too many neighbors, but class " << i_class << " is considerably big. Classifying as " << i_class << std::endl;
+//						return i_class;
+//					}
+//				}
+//
+//				std::cout << "Too many neighbors" << std::endl;
+//				continue;
+//			}
+//			std::cout << "enough neighbors. Classifying by majority" << std::endl;
+//			return argmax(classesCountVector[i_candidate]);
+//		}
 	}
 
 	return 0;

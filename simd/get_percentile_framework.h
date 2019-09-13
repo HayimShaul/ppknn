@@ -990,6 +990,10 @@ std::cerr << "check that addConstant considers simd" << std::endl;
 			ret = classVector[i_candidate] - 1;
 	}
 
+	// debugging
+	if ((ret < -1) || (ret > Configuration.classNumber))
+		OK = false;
+
 	return ret;
 }
 

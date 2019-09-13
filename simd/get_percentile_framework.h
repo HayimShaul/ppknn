@@ -991,7 +991,7 @@ std::cerr << "check that addConstant considers simd" << std::endl;
 	}
 
 	// debugging
-	if ((ret < -1) || (ret > Configuration.classNumber))
+	if ((ret < -1) || (ret > Configuration::classNumber))
 		OK = false;
 
 	return ret;

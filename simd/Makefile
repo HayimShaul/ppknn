@@ -1,4 +1,4 @@
-CCFLAGS = -g --std=c++11 -Wall 
+CCFLAGS = -g --std=c++11 -Wall -O3
 
 NTLINCDIR = ../../ntl-10.5.0-multithread/include
 NTLLIBDIR = ../../ntl-10.5.0-multithread/src

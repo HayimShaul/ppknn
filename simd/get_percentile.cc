@@ -101,7 +101,10 @@ void read_classifier_data(const char *fname) {
 	std::vector<float> v;
 	int c;
 	while (read_csv_line(in, v, c)) {
-		std::cout << "read " << v[0] << ", " << v[1] << ", " << c << std::endl;
+		std::cout << "read ";
+		for (unsigned int i = 0; i < v.size(); ++i)
+			std::cout << v[i] << ", ";
+		std::cout << c << std::endl;
 		Point<float> p(v);
 		rawData.push_back(p);
 		rawDataClasses.push_back(c);
@@ -262,6 +265,15 @@ void initialize(int argc, char **argv) {
 			resolutionFloat[i] = resolutionInt[i] = 100;
 		}
 	} else if (setResolutionMethod == SetResolutionMethod::ByUser) {
+		if (resolutionInt.dim() == 1) {
+			int res = resolutionInt[0];
+			resolutionInt.dim(rawData[0].dim());
+			resolutionFloat.dim(rawData[0].dim());
+			for (unsigned int i = 0; i < resolutionFloat.dim(); ++i) {
+				resolutionFloat[i] = res;
+				resolutionInt[i] = res;
+			}
+		}
 	}
 
 

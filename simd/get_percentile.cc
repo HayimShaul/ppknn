@@ -401,6 +401,7 @@ void initialize(int argc, char **argv) {
 		++bucket;
 	}
 
+	std::cout << "Resolution = " << resolutionInt << " with norm " << resolutionInt.normL1() << std::endl;
 	p = Primes::find_prime_bigger_than(resolutionInt.normL1());
 
 //	p = 2;

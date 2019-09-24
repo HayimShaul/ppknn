@@ -44,28 +44,10 @@ int main(int argc, char **argv) {
 
 //	secure_geo_search<MyZP, MyZPBits>(rawDiscreteData, discreteQuery);
 
-//	secure_knn_classifier<MyZP, MyZPBits>(rawDiscreteData, rawDataClasses, discreteQuery);
+	secure_knn_classifier<MyZP, MyZPBits>(rawDiscreteData, rawDataClasses, discreteQuery);
 
-	test_secure_knn_classifier<MyZP, MyZPBits>(rawDiscreteData, rawDataClasses);
+//	test_secure_knn_classifier<MyZP, MyZPBits>(rawDiscreteData, rawDataClasses);
 	return 0;
 }
 
-int main2(int argc, char **argv) {
-//	initialize(argc, argv);
-
-	p = 23;
-	r = 1;
-
-	MyZP::set_global_p(p, r);
-
-	SpecialPolynomials<MyZP>::init_polynomials(p);
-
-	for (int i = 0; i < 1; ++i) {
-		MyZP n(i);
-		MyZP m = SpecialPolynomials<MyZP>::sqrt_polynomial.compute(n);
-
-		std::cerr << "sqrt(" << n.to_int() << ") = " << m.to_int() << std::endl;
-	}
-	return 0;
-}
 

@@ -585,28 +585,57 @@ int secure_knn_classifier_gaussian(const std::vector<Point<int> > &sites, const 
 				std::cout << "Adding candidate 0" << std::endl;
 				thresholdCandidates.push_back(threshold);
 			}
+
 			{
-				Number threshold = avgEnc - sigma;
+				Number threshold = avgEnc - sigma*inv2;
 				std::cout << "Adding candidate 1" << std::endl;
 				thresholdCandidates.push_back(threshold);
 			}
 			{
-//				Number threshold = avgEnc - sigma*2;
-				Number threshold = avgEnc - sigma - sigma;
+				Number threshold = avgEnc - (sigma+1)*inv2;
 				std::cout << "Adding candidate 2" << std::endl;
 				thresholdCandidates.push_back(threshold);
 			}
+
 			{
-				Number threshold = avgEnc - sigma*inv2;
+				Number threshold = avgEnc - sigma;
 				std::cout << "Adding candidate 3" << std::endl;
 				thresholdCandidates.push_back(threshold);
 			}
+
 			{
-				Number threshold = avgEnc - (sigma+1)*inv2;
+				Number threshold = avgEnc - sigma - sigma*inv2;
 				std::cout << "Adding candidate 4" << std::endl;
 				thresholdCandidates.push_back(threshold);
 			}
+			{
+				Number threshold = avgEnc - sigma - (sigma+1)*inv2;
+				std::cout << "Adding candidate 5" << std::endl;
+				thresholdCandidates.push_back(threshold);
+			}
 
+			{
+				Number threshold = avgEnc - sigma - sigma;
+				std::cout << "Adding candidate 6" << std::endl;
+				thresholdCandidates.push_back(threshold);
+			}
+
+			{
+				Number threshold = avgEnc - sigma - sigma - sigma*inv2;
+				std::cout << "Adding candidate 7" << std::endl;
+				thresholdCandidates.push_back(threshold);
+			}
+			{
+				Number threshold = avgEnc - sigma - sigma - (sigma+1)*inv2;
+				std::cout << "Adding candidate 8" << std::endl;
+				thresholdCandidates.push_back(threshold);
+			}
+
+			{
+				Number threshold = avgEnc - sigma*10;
+				std::cout << "Adding candidate 9" << std::endl;
+				thresholdCandidates.push_back(threshold);
+			}
 		}
 
 
@@ -724,27 +753,66 @@ int secure_knn_classifier_gaussian(const std::vector<Point<int> > &sites, const 
 		for (unsigned int i_class = 0; i_class < foldedClassCountEnc.size(); ++i_class)
 			totalCount += foldedClassCountEnc[i_class];
 
+		std::cout << "candidates " << " are ";
+		for (unsigned int i_candidate = 0; i_candidate < thresholdCandidates.size(); ++i_candidate) {
+			for (unsigned int i_class = 0; i_class < Configuration::classNumber; ++i_class) {
+				std::cout << thresholdCandidates[i_candidate].to_vector()[i_class] << ", ";
+			}
+			std::cout << std::endl;
+		}
+
+		for (unsigned int i_class = 0; i_class < Configuration::classNumber; ++i_class) {
+			std::cout << "Class " << i_class << " count: ";
+			for (unsigned int i_candidate = 0; i_candidate < thresholdCandidates.size(); ++i_candidate) {
+				std::cout << foldedClassCountEnc[i_class].to_vector()[i_candidate] << ", ";
+			}
+			std::cout << std::endl;
+		}
+
 		Number tooFew = ComparePoly<Number>(totalCount) < (k/2);
 		Number tooMany = ComparePoly<Number>(totalCount) > (2*k);
 
+		std::cout << "totalCount = ";
+		for (unsigned int i_class = 0; i_class < Configuration::classNumber; ++i_class)
+			std::cout << totalCount.to_vector()[i_class] << ", ";
+		std::cout << std::endl;
+
+		std::cout << "tooFew = ";
+		for (unsigned int i_class = 0; i_class < Configuration::classNumber; ++i_class)
+			std::cout << tooFew.to_vector()[i_class] << ", ";
+		std::cout << std::endl;
+
+		std::cout << "tooMany = ";
+		for (unsigned int i_class = 0; i_class < Configuration::classNumber; ++i_class)
+			std::cout << tooMany.to_vector()[i_class] << ", ";
+		std::cout << std::endl;
 
 		Number tooManyClass = 0;
 		 	// else if (totalCount > 2*k) 
 		for (unsigned int i_class = 0; i_class < foldedClassCountEnc.size(); ++i_class) {
-			tooManyClass += 
-				// If we can reduce the "neighbors sphere" until we are left with 2*k s.t. one class has more than treshold neighbors
-				(ComparePoly<Number>(totalCount - foldedClassCountEnc[i_class]) < k) * (1+i_class);
+			// If we can reduce the "neighbors sphere" until we are left with 2*k s.t. one class has more than treshold neighbors
+			Number allClassesButI = totalCount - foldedClassCountEnc[i_class];
+			Number isVastMajority = ComparePoly<Number>(allClassesButI) < k;
+			tooManyClass += isVastMajority * (1+i_class);
 		}
+		tooManyClass *= tooMany;
 
 
 		std::vector<Number> classIsMax(foldedClassCountEnc.size());
 		for (unsigned int i_class = 0; i_class < foldedClassCountEnc.size(); ++i_class) {
-			classIsMax[i_class] = (-tooFew + 1)*(i_class + 1);
+			classIsMax[i_class] = (-tooMany + 1)*(-tooFew + 1)*(i_class + 1);
 		}
 
 		for (unsigned int i_class = 0; i_class < foldedClassCountEnc.size(); ++i_class) {
 			for (unsigned int j_class = i_class + 1; j_class < foldedClassCountEnc.size(); ++j_class) {
 				Number isIBiggerJ = ComparePoly<Number>(foldedClassCountEnc[i_class] - foldedClassCountEnc[j_class]) < (2*k);
+				for (unsigned int i_candidate = 0; i_candidate < thresholdCandidates.size(); ++i_candidate) {
+					std::cout << "For candidtae " << i_candidate << ": ";
+					if (isIBiggerJ.to_vector()[i_candidate] == 1)
+						std::cout << i_class << " is bigger than " << j_class << std::endl;
+					else
+						std::cout << j_class << " is bigger than " << i_class << std::endl;
+				}
 				classIsMax[i_class] *= isIBiggerJ;
 				classIsMax[j_class] *= (-isIBiggerJ + 1);
 			}
@@ -755,7 +823,16 @@ int secure_knn_classifier_gaussian(const std::vector<Point<int> > &sites, const 
 			inRangeClass += classIsMax[i_class];
 		}
 
-		classEnc = tooMany*tooManyClass + (-tooMany+1)*inRangeClass;
+		classEnc = tooManyClass + inRangeClass;
+
+		for (unsigned int i_candidate = 0; i_candidate < thresholdCandidates.size(); ++i_candidate) {
+			std::cout << "Checking candidate " << i_candidate << std::endl;
+			std::cout << "tooFew = " << tooFew.to_vector()[i_candidate] << std::endl;
+			std::cout << "tooMany = " << tooFew.to_vector()[i_candidate] << std::endl;
+			for (unsigned int i_class = 0; i_class < foldedClassCountEnc.size(); ++i_class) {
+				std::cout << "  isMax[" << i_class << "] = " << classIsMax[i_class].to_vector()[i_candidate] << std::endl;
+			}
+		}
 	}
 
 	print_stat(-1);
@@ -765,16 +842,16 @@ int secure_knn_classifier_gaussian(const std::vector<Point<int> > &sites, const 
 	std::vector<long int> classVector = classEnc.to_vector();
 
 	int ret = -1;
-	for (unsigned int i_candidate = 0; i_candidate < classVector.size(); ++i_candidate) {
-		if ((classVector[i_candidate] != 0) && (ret != -1))
-			ret = classVector[i_candidate] - 1;
-	}
+	for (unsigned int i_candidate = 0; i_candidate < thresholdCandidates.size(); ++i_candidate) {
+		// debugging
+		if ((classVector[i_candidate] < 0) || (classVector[i_candidate] > (int)Configuration::classNumber+1)) {
+			std::cout << "test Failed.  ret = " << classVector[i_candidate] << std::endl;
+			OK = false;
+			exit(1);
+		}
 
-	// debugging
-	if ((ret < -1) || (ret > (int)Configuration::classNumber)) {
-		std::cout << "test Failed.  ret = " << ret << std::endl;
-		OK = false;
-		exit(1);
+		if (classVector[i_candidate] != 0)
+			ret = classVector[i_candidate] - 1;
 	}
 
 	return ret;
@@ -839,13 +916,19 @@ void test_secure_knn_classifier(const std::vector<Point<int> > &sites, const std
 	int mismatch = 0;
 	int secClassificationFailed = 0;
 
-	int secureCorrect[2] = {0};
-	int secureIncorrect[2] = {0};
+	std::vector<int> secFalsePositives(Configuration::classNumber, 1);
+	std::vector<int> secFalseNegatives(Configuration::classNumber, 1);
+	std::vector<int> secTruePositives(Configuration::classNumber, 1);
+	std::vector<int> secTrueNegatives(Configuration::classNumber, 1);
 
-	int realCorrect[2] = {0};
-	int realIncorrect[2] = {0};
+	std::vector<int> realFalsePositives(Configuration::classNumber, 1);
+	std::vector<int> realFalseNegatives(Configuration::classNumber, 1);
+	std::vector<int> realTruePositives(Configuration::classNumber, 1);
+	std::vector<int> realTrueNegatives(Configuration::classNumber, 1);
 
-	for (unsigned int i_query = 0; i_query < sites.size(); ++i_query) {
+	for (unsigned int i_query = 0; i_query < sites.size(); ++i_query)
+//	for (unsigned int i_query = 0; i_query < 5; ++i_query)
+	{
 
 		std::vector<Point<int> > sub_sites;
 		std::vector<int> sub_classes;
@@ -877,46 +960,56 @@ void test_secure_knn_classifier(const std::vector<Point<int> > &sites, const std
 				std::cout << "real KNN and secure KNN mismatch" << std::endl;
 				++mismatch;
 			}
-			if (realKnnClass == classes[i_query]) { ++realCorrect[classes[i_query]]; } else { ++realIncorrect[classes[i_query]]; }
-			if (secKnnClass == classes[i_query]) { ++secureCorrect[classes[i_query]]; } else { ++secureIncorrect[classes[i_query]]; }
+
+			for (int i_class = 0; i_class < (int)Configuration::classNumber; ++i_class) {
+				if ((realKnnClass == i_class) && (classes[i_query] == i_class))
+					++realTruePositives[i_class];
+				if ((realKnnClass != i_class) && (classes[i_query] == i_class))
+					++realFalseNegatives[i_class];
+				if ((realKnnClass == i_class) && (classes[i_query] != i_class))
+					++realFalsePositives[i_class];
+				if ((realKnnClass != i_class) && (classes[i_query] != i_class))
+					++realTrueNegatives[i_class];
+
+				if ((secKnnClass == i_class) && (classes[i_query] == i_class))
+					++secTruePositives[i_class];
+				if ((secKnnClass != i_class) && (classes[i_query] == i_class))
+					++secFalseNegatives[i_class];
+				if ((secKnnClass == i_class) && (classes[i_query] != i_class))
+					++secFalsePositives[i_class];
+				if ((secKnnClass != i_class) && (classes[i_query] != i_class))
+					++secTrueNegatives[i_class];
+			}
 		}
 
-		if (match + mismatch > 0)
-			std::cout << "OUTPUT [1]: " << "matched: " << match << " out of " << (match+mismatch) << " = " << ((int)100*match/(match+mismatch)) << "%" << std::endl;
-		std::cout << "OUTPUT [2]: " << "correct secure: class0 = " << secureCorrect[0] << " class1 = " << secureCorrect[1] << std::endl;
-		std::cout << "OUTPUT [3]: " << "incorrect secure: class0 = " << secureIncorrect[0] << " class1 = " << secureIncorrect[1] << std::endl;
-		std::cout << "OUTPUT [4]: " << "total: " << (secureCorrect[0]+secureCorrect[1]+secureIncorrect[0]+secureIncorrect[1]) << std::endl;
+		std::vector<float> secPrecision(Configuration::classNumber, 0);
+		std::vector<float> secRecall(Configuration::classNumber, 0);
+		std::vector<float> secF1Scores(Configuration::classNumber, 0);
 
-		if (secureCorrect[0]+secureCorrect[1]+secureIncorrect[0]+secureIncorrect[1] > 0)
-			std::cout << "OUTPUT [5]: " << "secure ratio: " << ((int)100*(secureCorrect[0]+secureCorrect[1])/(secureCorrect[0]+secureCorrect[1]+secureIncorrect[0]+secureIncorrect[1])) << "%" << std::endl;
-		if (secureCorrect[1] + secureIncorrect[1])
-			std::cout << "OUTPUT [6]: " << "secure Dice score1: " << (2.0*secureCorrect[1] / (secureCorrect[1] + secureIncorrect[1])) << std::endl;
-		if (secureCorrect[0] + secureIncorrect[0])
-			std::cout << "OUTPUT [7]: " << "secure Dice score0: " << (2.0*secureCorrect[0] / (secureCorrect[0] + secureIncorrect[0])) << std::endl;
+		std::vector<float> realPrecision(Configuration::classNumber, 0);
+		std::vector<float> realRecall(Configuration::classNumber, 0);
+		std::vector<float> realF1Scores(Configuration::classNumber, 0);
 
+		std::cout << "Iteration " << i_query << " / " << sites.size() << std::endl;
+		for (unsigned int i_class = 0; i_class < Configuration::classNumber; ++i_class) {
+			secPrecision[i_class] = 1.0 - (1.0 * secFalsePositives[i_class]) / (secTruePositives[i_class] + secFalsePositives[i_class]);
+			secRecall[i_class] = 1.0 - (1.0 * secFalseNegatives[i_class]) / (secTruePositives[i_class] + secFalseNegatives[i_class]);
+			secF1Scores[i_class] = 2.0 * secPrecision[i_class] * secRecall[i_class] / (secPrecision[i_class] + secRecall[i_class]);
+			std::cout << "KISH OUTPUT: " << " Secure Dice score " << i_class << ": " << secF1Scores[i_class] << std::endl;
 
-
-
-		std::cout << "OUTPUT [8]: " << "correct real: class0 = " << realCorrect[0] << " class1 = " << realCorrect[1] << std::endl;
-		std::cout << "OUTPUT [9]: " << "incorrect real: class0 = " << realIncorrect[0] << " class1 = " << realIncorrect[1] << std::endl;
-		std::cout << "OUTPUT [10]: " << "total: " << (realCorrect[0]+realCorrect[1]+realIncorrect[0]+realIncorrect[1]) << std::endl;
-		if (realCorrect[0]+realCorrect[1]+realIncorrect[0]+realIncorrect[1] > 0)
-			std::cout << "OUTPUT [11]: " << "insecure ratio: " << ((int)100*(realCorrect[0]+realCorrect[1])/(realCorrect[0]+realCorrect[1]+realIncorrect[0]+realIncorrect[1])) << "%" << std::endl;
-		if (realCorrect[1] + realIncorrect[1] > 0)
-			std::cout << "OUTPUT [12]: " << "insecure Dice score1: " << (2.0*realCorrect[1] / (realCorrect[1] + realIncorrect[1])) << std::endl;
-		if (realCorrect[0] + realIncorrect[0] > 0)
-			std::cout << "OUTPUT [13]: " << "insecure Dice score0: " << (2.0*realCorrect[0] / (realCorrect[0] + realIncorrect[0])) << std::endl;
-
-		std::cout << "OUTPUT [14]: " << "classification failed: " << secClassificationFailed << std::endl;
+			realPrecision[i_class] = 1.0 - (1.0 * realFalsePositives[i_class]) / (realTruePositives[i_class] + realFalsePositives[i_class]);
+			realRecall[i_class] = 1.0 - (1.0 * realFalseNegatives[i_class]) / (realTruePositives[i_class] + realFalseNegatives[i_class]);
+			realF1Scores[i_class] = 2.0 * realPrecision[i_class] * realRecall[i_class] / (realPrecision[i_class] + realRecall[i_class]);
+			std::cout << "KISH OUTPUT: " << " Real Dice score " << i_class << ": " << realF1Scores[i_class] << std::endl;
+		}
 
 		std::cout << "ITERATIONS: average iterations needed: " << (avgIterations / (i_query+1)) << std::endl;
 	}
 
 	if (OK)
-		std::cout << "test is OK 3";
+		std::cout << "test is OK 3" << std::endl;
 	else
-		std::cout << "test is wrong 3";
-
+		std::cout << "test is wrong 3" << std::endl;
 }
 
 void test_kish_classifier(const std::vector<Point<int> > &sites, const std::vector<int> &classes) {
@@ -981,10 +1074,9 @@ void test_kish_classifier(const std::vector<Point<int> > &sites, const std::vect
 	}
 
 	if (OK)
-		std::cout << "test is OK 4";
+		std::cout << "test is OK 4" << std::endl;
 	else
-		std::cout << "test is wrong 4";
-
+		std::cout << "test is wrong 4" << std::endl;
 }
 
 #endif

@@ -227,10 +227,14 @@ void initialize(int argc, char **argv) {
 		}
 	}
 
-	if (has_fname && ((n != -1) || (p > 0))) {
-		std::cout << "Can't have --in together with --p or --n" << std::endl;
+	if (has_fname && (n != -1)) {
+		std::cout << "Can't have --in together with --n" << std::endl;
 		exit(1);
 	}
+//	if (has_fname && ((n != -1) || (p > 0))) {
+//		std::cout << "Can't have --in together with --p or --n" << std::endl;
+//		exit(1);
+//	}
 
 	if ((n > -1) && (p == 0)) {
 		std::cout << "--p should be given when --n is given" << std::endl;
@@ -256,7 +260,7 @@ void initialize(int argc, char **argv) {
 		resolutionInt.dim( rawData[0].dim() );
 		resolutionFloat.dim( rawData[0].dim() );
 		for (unsigned int i = 0; i < rawData[0].dim(); ++i) {
-			resolutionFloat[i] = resolutionInt[i] = p/rawData[0].dim();
+			resolutionFloat[i] = resolutionInt[i] = p/(2*rawData[0].dim());
 		}
 	} else if (setResolutionMethod == SetResolutionMethod::Default) {
 		resolutionInt.dim( rawData[0].dim() );
@@ -402,7 +406,10 @@ void initialize(int argc, char **argv) {
 	}
 
 	std::cout << "Resolution = " << resolutionInt << " with norm " << resolutionInt.normL1() << std::endl;
-	p = Primes::find_prime_bigger_than(2 * resolutionInt.normL1());
+	if (setResolutionMethod == SetResolutionMethod::ByP)
+		p = Primes::find_prime_bigger_than(p);
+	else
+		p = Primes::find_prime_bigger_than(2 * resolutionInt.normL1());
 
 //	p = 2;
 	r = 1;

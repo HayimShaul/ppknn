@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
 	RETRIES = 5;
 	MAX_CANDIDATES = -1;
 
-	srand(time(NULL));
+//	srand(time(NULL));
 
 	initialize(argc, argv);
 	MyZP::set_global_p(p, r);

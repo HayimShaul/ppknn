@@ -345,14 +345,10 @@ void print_histogram(const std::vector<Point<int> > &sites, const std::vector<in
 	std::cout << "sigma = " << sigma << std::endl;
 
 	std::cout << "Histogram:" << std::endl;
-	std::vector<int> distribution_test(20);
-	std::vector<int> distribution_test_zero(20);
-	std::vector<int> distribution_test_one(20);
-
-	for (auto i = distribution_test.begin(); i != distribution_test.end(); ++i)
-		*i = 0;
-	distribution_test_zero = distribution_test;
-	distribution_test_one = distribution_test;
+	std::vector<int> distribution_test(20, 0);
+	std::vector< std::vector<int> > distribution_test_class(20);
+	for (int i = 0; i < 20; ++i)
+		distribution_test_class[i].resize(Configuration::classNumber);
 
 	int i_site = 0;
 	for (auto i = sites.begin(); i != sites.end(); ++i, ++i_site) {
@@ -365,15 +361,14 @@ void print_histogram(const std::vector<Point<int> > &sites, const std::vector<in
 			bucket = 0;
 
 		++distribution_test[bucket];
-		if (classes[i_site] == 0)
-			++distribution_test_zero[bucket];
-		else
-			++distribution_test_one[bucket];
+		++distribution_test_class[bucket][classes[i_site]];
 	}
 
 	for (unsigned int bucket = 0; bucket < distribution_test.size(); ++bucket) {
-		std::cout << ((bucket - 10) * ((sigma+2)/3) + avg)  << ": " << distribution_test[bucket] <<
-		" = " << distribution_test_zero[bucket] << " + " << distribution_test_one[bucket] << std::endl;
+		std::cout << ((bucket - 10) * ((sigma+2)/3) + avg)  << ": " << distribution_test[bucket] << " =";
+		for (unsigned int i_class = 0; i_class < distribution_test_class[bucket].size(); ++i_class)
+		 	std::cout << distribution_test_class[bucket][i_class] << " + ";
+		std::cout << std::endl;
 	}
 }
 
@@ -441,25 +436,25 @@ std::vector<long int> random_vector(unsigned int size, long mod) {
 // classCountEnc has the structure classCountEnc[i_candidate][i_class] = 1/0 with SIMD slot s, if site s has class i_class for candidate i_candidate
 // foldedClassCountEnc has the structure foldedClassCountEnc[i_class] = n with SIMD slot s, then class i_class and candidate s has n neighbors
 template<class Number>
-void maskFoldRecrypt(std::vector<std::vector<Number> > &classCountEnc, std::vector<Number> &foldedClassCountEnc) {
+void maskFoldRecrypt(std::vector<std::vector<Number> > &classCountEnc,  std::vector<Number> &foldedClassCountEnc) {
 	unsigned int candidateNum = classCountEnc.size();
 	unsigned int classNum = classCountEnc[0].size();
 
 	std::cout << "maskFoldRecrypt candidateNum = " << candidateNum << std::endl;
 	std::cout << "maskFoldRecrypt classNum = " << classNum << std::endl;
 
-	// mask
-	std::vector<std::vector<std::vector<long int> > > mask;
-	mask.resize(candidateNum);
+	// mask counters
+	std::vector<std::vector<std::vector<long int> > > counterMask;
+	counterMask.resize(candidateNum);
 	for (unsigned int i_candidate = 0; i_candidate < candidateNum; ++i_candidate) {
-		mask[i_candidate].resize(classNum);
+		counterMask[i_candidate].resize(classNum);
 		for (unsigned int i_class = 0; i_class < classNum; ++i_class)
-			mask[i_candidate][i_class] = random_vector(Number::simd_factor(), Number::get_global_ring_size());
+			counterMask[i_candidate][i_class] = random_vector(Number::simd_factor(), Number::get_global_ring_size());
 	}
 
 	for (unsigned int i_candidate = 0; i_candidate < candidateNum; ++i_candidate) {
 		for (unsigned int i_class = 0; i_class < classNum; ++i_class)
-			classCountEnc[i_candidate][i_class] += mask[i_candidate][i_class];
+			classCountEnc[i_candidate][i_class] += counterMask[i_candidate][i_class];
 	}
 
 	//////////////////////////////////////////////
@@ -478,6 +473,7 @@ void maskFoldRecrypt(std::vector<std::vector<Number> > &classCountEnc, std::vect
 			classCount[i_candidate][i_class] = foldMod(v, Number::get_global_ring_size());
 		}
 	}
+
 	// encrypt
 	foldedClassCountEnc.resize(classNum);
 	for (unsigned int i_class = 0; i_class < classNum; ++i_class) {
@@ -497,7 +493,7 @@ void maskFoldRecrypt(std::vector<std::vector<Number> > &classCountEnc, std::vect
 	for (unsigned int i_class = 0; i_class < classNum; ++i_class) {
 		foldedMask[i_class].resize(candidateNum, 0);
 		for (unsigned int i_candidate = 0; i_candidate < candidateNum; ++i_candidate) {
-			foldedMask[i_class][i_candidate] = foldMod(mask[i_candidate][i_class], Number::get_global_ring_size());
+			foldedMask[i_class][i_candidate] = foldMod(counterMask[i_candidate][i_class], Number::get_global_ring_size());
 		}
 	}
 
@@ -505,6 +501,51 @@ void maskFoldRecrypt(std::vector<std::vector<Number> > &classCountEnc, std::vect
 	for (unsigned int i_class = 0; i_class < classNum; ++i_class) {
 		foldedClassCountEnc[i_class] -= foldedMask[i_class];
 	}
+}
+
+template<class Number>
+void maskFoldRecrypt(std::vector<Number> &candidatesEnc, Number &foldedCandidates) {
+	unsigned int candidateNum = candidatesEnc.size();
+
+	// mask counters
+	std::vector<std::vector<long int> > candidateMask;
+	candidateMask.resize(candidateNum);
+	for (unsigned int i_candidate = 0; i_candidate < candidateNum; ++i_candidate) {
+		candidateMask[i_candidate] = random_vector(Number::simd_factor(), Number::get_global_ring_size());
+	}
+
+	for (unsigned int i_candidate = 0; i_candidate < candidateNum; ++i_candidate) {
+		candidatesEnc[i_candidate] += candidateMask[i_candidate];
+	}
+
+	//////////////////////////////////////////////
+	// send the masked classCountEnc to the client
+	//////////////////////////////////////////////
+
+	// decrypt fold and encrypt the classCount vector
+	std::vector<long int> candidates;
+	candidates.resize(candidateNum);
+	for (unsigned int i_candidate = 0; i_candidate < candidateNum; ++i_candidate) {
+		std::vector<long int> v = candidatesEnc[i_candidate].to_vector();
+		candidates[i_candidate] = v[0];
+	}
+
+	// encrypt
+	foldedCandidates.from_vector(candidates);
+
+	//////////////////////////////////////////////
+	// send the masked classCountEnc to the client
+	//////////////////////////////////////////////
+
+	// fold and transpose the mask matrix
+	std::vector<long int> foldedCandidateMask;
+	foldedCandidateMask.resize(candidateNum, 0);
+	for (unsigned int i_candidate = 0; i_candidate < candidateNum; ++i_candidate) {
+		foldedCandidateMask[i_candidate] = candidateMask[i_candidate][0];
+	}
+
+	// unmask
+	foldedCandidates -= foldedCandidateMask;
 }
 
 // classesCountVector[i_candidate][i_class] = how many neighbors of class i_class we found for candidate i_candidate
@@ -693,11 +734,26 @@ int secure_knn_classifier_gaussian(const std::vector<Point<int> > &sites, const 
 		classCountEnc[i_candidate].resize(Configuration::classNumber, 0);
 	}
 
+	std::vector< std::vector<Number> > classCountSampleEnc(thresholdCandidates.size());
+	for (unsigned int i_candidate = 0; i_candidate < thresholdCandidates.size(); ++i_candidate) {
+		classCountSampleEnc[i_candidate].resize(Configuration::classNumber, 0);
+	}
+
+	std::random_device rd;
+	std::mt19937 gen(rd());
+	float sampleProb;
+	if (sites.size() > (unsigned int)Number::get_global_ring_size()/4)
+		sampleProb = (float)Number::get_global_ring_size() / (4*sites.size());
+	else
+		sampleProb = 1;
+
 	auto dist = distances.begin();
 	while (dist != distances.end()) {
 		Number xi = dist.getDistances();
 
 		{
+			std::bernoulli_distribution bernoulliSampler(sampleProb);
+
 			for (unsigned int i_candidate = 0; i_candidate < thresholdCandidates.size(); ++i_candidate) {
 				global_timer.start();
 
@@ -706,6 +762,11 @@ int secure_knn_classifier_gaussian(const std::vector<Point<int> > &sites, const 
 				for (unsigned int i_class = 0; i_class < Configuration::classNumber; ++i_class) {
 					Number knnClassEnc = knnEnc * dist.getClass(i_class);
 					classCountEnc[i_candidate][i_class] += knnClassEnc;
+
+					std::vector<long> sampleMask(Number::simd_factor(), 0);
+					for (unsigned int i_simd = 0; i_simd < Number::simd_factor(); ++i_simd)
+						sampleMask[i_simd] = bernoulliSampler(gen);
+					classCountSampleEnc[i_candidate][i_class] += knnClassEnc * sampleMask;
 				}
 
 				std::cout << global_timer.end("count classes for one candidate for one batch of points");
@@ -738,9 +799,13 @@ int secure_knn_classifier_gaussian(const std::vector<Point<int> > &sites, const 
 	// classCountEnc has the structure classCountEnc[i_candidate][i_class] = 1/0 with SIMD slot s, if site s has class i_class for candidate i_candidate
 	// foldedClassCountEnc has the structure foldedClassCountEnc[i_class] = n with SIMD slot s, then class i_class and candidate s has n neighbors
 	std::vector<Number> foldedClassCountEnc;
+	std::vector<Number> foldedClassCountSampleEnc;
+	Number foldedThresholdCancdidates;
 	{
 		AutoTakeTimes("mask fold and recrypt");
 		maskFoldRecrypt(classCountEnc, foldedClassCountEnc);
+		maskFoldRecrypt(classCountSampleEnc, foldedClassCountSampleEnc);
+		maskFoldRecrypt(thresholdCandidates, foldedThresholdCancdidates);
 	}
 
 	std::vector<long int> vec1(Number::simd_factor(), 1);
@@ -750,8 +815,11 @@ int secure_knn_classifier_gaussian(const std::vector<Point<int> > &sites, const 
 		AutoTakeTimes("compute Max");
 
 		Number totalCount = 0;
-		for (unsigned int i_class = 0; i_class < foldedClassCountEnc.size(); ++i_class)
+		Number totalCountSample = 0;
+		for (unsigned int i_class = 0; i_class < foldedClassCountEnc.size(); ++i_class) {
 			totalCount += foldedClassCountEnc[i_class];
+			totalCountSample += foldedClassCountSampleEnc[i_class];
+		}
 
 		std::cout << "candidates " << " are ";
 		for (unsigned int i_candidate = 0; i_candidate < thresholdCandidates.size(); ++i_candidate) {
@@ -771,6 +839,7 @@ int secure_knn_classifier_gaussian(const std::vector<Point<int> > &sites, const 
 
 		Number tooFew = ComparePoly<Number>(totalCount) < (k/2);
 		Number tooMany = ComparePoly<Number>(totalCount) > (2*k);
+		Number overflow = ComparePoly<Number>(totalCountSample) > (Number::get_global_ring_size()*sampleProb/2);
 
 		std::cout << "totalCount = ";
 		for (unsigned int i_class = 0; i_class < Configuration::classNumber; ++i_class)
@@ -795,7 +864,7 @@ int secure_knn_classifier_gaussian(const std::vector<Point<int> > &sites, const 
 			Number isVastMajority = ComparePoly<Number>(allClassesButI) < k;
 			tooManyClass += isVastMajority * (1+i_class);
 		}
-		tooManyClass *= tooMany;
+		tooManyClass *= tooMany * overflow;
 
 
 		std::vector<Number> classIsMax(foldedClassCountEnc.size());
@@ -806,15 +875,15 @@ int secure_knn_classifier_gaussian(const std::vector<Point<int> > &sites, const 
 		for (unsigned int i_class = 0; i_class < foldedClassCountEnc.size(); ++i_class) {
 			for (unsigned int j_class = i_class + 1; j_class < foldedClassCountEnc.size(); ++j_class) {
 				Number isIBiggerJ = ComparePoly<Number>(foldedClassCountEnc[i_class] - foldedClassCountEnc[j_class]) < (2*k);
-				for (unsigned int i_candidate = 0; i_candidate < thresholdCandidates.size(); ++i_candidate) {
-					std::cout << "For candidtae " << i_candidate << ": ";
-					if (isIBiggerJ.to_vector()[i_candidate] == 1)
-						std::cout << i_class << " is bigger than " << j_class << std::endl;
-					else
-						std::cout << j_class << " is bigger than " << i_class << std::endl;
-				}
-				classIsMax[i_class] *= isIBiggerJ;
-				classIsMax[j_class] *= (-isIBiggerJ + 1);
+//				for (unsigned int i_candidate = 0; i_candidate < thresholdCandidates.size(); ++i_candidate) {
+//					std::cout << "For candidtae " << i_candidate << ": ";
+//					if (isIBiggerJ.to_vector()[i_candidate] == 1)
+//						std::cout << i_class << " is bigger than " << j_class << std::endl;
+//					else
+//						std::cout << j_class << " is bigger than " << i_class << std::endl;
+//				}
+				classIsMax[j_class] *= isIBiggerJ;
+				classIsMax[i_class] *= (-isIBiggerJ + 1);
 			}
 		}
 
@@ -824,6 +893,7 @@ int secure_knn_classifier_gaussian(const std::vector<Point<int> > &sites, const 
 		}
 
 		classEnc = tooManyClass + inRangeClass;
+		classEnc *= SpecialPolynomials<Number>::is_positive_polynomial.compute(foldedThresholdCancdidates);
 
 		for (unsigned int i_candidate = 0; i_candidate < thresholdCandidates.size(); ++i_candidate) {
 			std::cout << "Checking candidate " << i_candidate << std::endl;

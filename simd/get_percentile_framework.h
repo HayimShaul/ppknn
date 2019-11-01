@@ -821,40 +821,40 @@ int secure_knn_classifier_gaussian(const std::vector<Point<int> > &sites, const 
 			totalCountSample += foldedClassCountSampleEnc[i_class];
 		}
 
-		std::cout << "candidates " << " are ";
-		for (unsigned int i_candidate = 0; i_candidate < thresholdCandidates.size(); ++i_candidate) {
-			for (unsigned int i_class = 0; i_class < Configuration::classNumber; ++i_class) {
-				std::cout << thresholdCandidates[i_candidate].to_vector()[i_class] << ", ";
-			}
-			std::cout << std::endl;
-		}
-
-		for (unsigned int i_class = 0; i_class < Configuration::classNumber; ++i_class) {
-			std::cout << "Class " << i_class << " count: ";
-			for (unsigned int i_candidate = 0; i_candidate < thresholdCandidates.size(); ++i_candidate) {
-				std::cout << foldedClassCountEnc[i_class].to_vector()[i_candidate] << ", ";
-			}
-			std::cout << std::endl;
-		}
+//		std::cout << "candidates " << " are ";
+//		for (unsigned int i_candidate = 0; i_candidate < thresholdCandidates.size(); ++i_candidate) {
+//			for (unsigned int i_class = 0; i_class < Configuration::classNumber; ++i_class) {
+//				std::cout << thresholdCandidates[i_candidate].to_vector()[i_class] << ", ";
+//			}
+//			std::cout << std::endl;
+//		}
+//
+//		for (unsigned int i_class = 0; i_class < Configuration::classNumber; ++i_class) {
+//			std::cout << "Class " << i_class << " count: ";
+//			for (unsigned int i_candidate = 0; i_candidate < thresholdCandidates.size(); ++i_candidate) {
+//				std::cout << foldedClassCountEnc[i_class].to_vector()[i_candidate] << ", ";
+//			}
+//			std::cout << std::endl;
+//		}
 
 		Number tooFew = ComparePoly<Number>(totalCount) < (k/2);
 		Number tooMany = ComparePoly<Number>(totalCount) > (2*k);
 		Number overflow = ComparePoly<Number>(totalCountSample) > (Number::get_global_ring_size()*sampleProb/2);
 
-		std::cout << "totalCount = ";
-		for (unsigned int i_class = 0; i_class < Configuration::classNumber; ++i_class)
-			std::cout << totalCount.to_vector()[i_class] << ", ";
-		std::cout << std::endl;
-
-		std::cout << "tooFew = ";
-		for (unsigned int i_class = 0; i_class < Configuration::classNumber; ++i_class)
-			std::cout << tooFew.to_vector()[i_class] << ", ";
-		std::cout << std::endl;
-
-		std::cout << "tooMany = ";
-		for (unsigned int i_class = 0; i_class < Configuration::classNumber; ++i_class)
-			std::cout << tooMany.to_vector()[i_class] << ", ";
-		std::cout << std::endl;
+//		std::cout << "totalCount = ";
+//		for (unsigned int i_cand = 0; i_cand < thresholdCandidates.size(); ++i_cand)
+//			std::cout << totalCount.to_vector()[i_cand] << ", ";
+//		std::cout << std::endl;
+//
+//		std::cout << "tooFew = ";
+//		for (unsigned int i_cand = 0; i_cand < thresholdCandidates.size(); ++i_cand)
+//			std::cout << tooFew.to_vector()[i_cand] << ", ";
+//		std::cout << std::endl;
+//
+//		std::cout << "tooMany = ";
+//		for (unsigned int i_cand = 0; i_cand < thresholdCandidates.size(); ++i_cand)
+//			std::cout << tooMany.to_vector()[i_cand] << ", ";
+//		std::cout << std::endl;
 
 		Number tooManyClass = 0;
 		 	// else if (totalCount > 2*k) 
@@ -892,17 +892,24 @@ int secure_knn_classifier_gaussian(const std::vector<Point<int> > &sites, const 
 			inRangeClass += classIsMax[i_class];
 		}
 
-		classEnc = tooManyClass + inRangeClass;
-		classEnc *= SpecialPolynomials<Number>::is_positive_polynomial.compute(foldedThresholdCancdidates);
+		Number isWrapAround = SpecialPolynomials<Number>::is_positive_polynomial.compute(foldedThresholdCancdidates);
 
-		for (unsigned int i_candidate = 0; i_candidate < thresholdCandidates.size(); ++i_candidate) {
-			std::cout << "Checking candidate " << i_candidate << std::endl;
-			std::cout << "tooFew = " << tooFew.to_vector()[i_candidate] << std::endl;
-			std::cout << "tooMany = " << tooFew.to_vector()[i_candidate] << std::endl;
-			for (unsigned int i_class = 0; i_class < foldedClassCountEnc.size(); ++i_class) {
-				std::cout << "  isMax[" << i_class << "] = " << classIsMax[i_class].to_vector()[i_candidate] << std::endl;
-			}
-		}
+//		std::cout << "isWrapAround = ";
+//		for (unsigned int i_cand = 0; i_cand < thresholdCandidates.size(); ++i_cand)
+//			std::cout << isWrapAround.to_vector()[i_cand] << ", ";
+//		std::cout << std::endl;
+
+		classEnc = tooManyClass + inRangeClass;
+		classEnc *= isWrapAround;
+
+//		for (unsigned int i_candidate = 0; i_candidate < thresholdCandidates.size(); ++i_candidate) {
+//			std::cout << "Checking candidate " << i_candidate << std::endl;
+//			std::cout << "tooFew = " << tooFew.to_vector()[i_candidate] << std::endl;
+//			std::cout << "tooMany = " << tooFew.to_vector()[i_candidate] << std::endl;
+//			for (unsigned int i_class = 0; i_class < foldedClassCountEnc.size(); ++i_class) {
+//				std::cout << "  isMax[" << i_class << "] = " << classIsMax[i_class].to_vector()[i_candidate] << std::endl;
+//			}
+//		}
 	}
 
 	print_stat(-1);

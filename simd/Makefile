@@ -1,4 +1,4 @@
-CCFLAGS = -g --std=c++11 -Wall
+CCFLAGS = -g --std=c++11 -Wall -O3
 
 NTLINCDIR = ../../ntl-10.5.0-multithread/include
 NTLLIBDIR = ../../ntl-10.5.0-multithread/src
@@ -15,7 +15,7 @@ LIBS = -L$(LIPHELIBDIR) -lliphe -lHelibLiphe  $(FHELIBDIR)/fhe.a $(NTLLIBDIR)/nt
 INCS = $(JSONDIR) -I$(NTLINCDIR) -I$(FHEINCDIR) -I$(LIPHEINCDIR)
 
 #all: test_zp test_helib
-all: test_zp test_helib test_kish_vs_k test_gaussian_kish
+all: test_zp knn_helib test_kish_vs_k test_gaussian_kish
 
 #all: test min fast_min min2 min3
 
@@ -31,7 +31,7 @@ test_gaussian_kish: test_gaussian_kish.o get_percentile.o point.o configuration.
 test_zp: test_zp.o get_percentile.o point.o configuration.o
 	g++ $(LDFLAGS) -o $@ $^ $(LIBS)
 
-test_helib: test_helib.o get_percentile.o point.o configuration.o
+knn_helib: test_helib.o get_percentile.o point.o configuration.o
 	g++ $(LDFLAGS) -o $@ $^ $(LIBS)
 
 
@@ -39,5 +39,5 @@ test_helib: test_helib.o get_percentile.o point.o configuration.o
 	g++ $(CCFLAGS) -c  $(INCS) $<
 
 clean:
-	rm -f *.o test_zp test_helib build_sqrt_polynomial
+	rm -f *.o test_zp knn_helib build_sqrt_polynomial test_kish_vs_k test_gaussian_kish
 

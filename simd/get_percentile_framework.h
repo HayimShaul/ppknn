@@ -460,6 +460,12 @@ void maskFoldRecrypt(std::vector<std::vector<Number> > &classCountEnc,  std::vec
 	//////////////////////////////////////////////
 	// send the masked classCountEnc to the client
 	//////////////////////////////////////////////
+	if (Configuration::communication.is_open()) {
+		for (unsigned int i_candidate = 0; i_candidate < candidateNum; ++i_candidate) {
+			for (unsigned int i_class = 0; i_class < classNum; ++i_class)
+				Configuration::communication << classCountEnc[i_candidate][i_class] << std::endl;
+		}
+	}
 
 	// decrypt fold and encrypt the classCount vector
 	std::vector<std::vector<long int> > classCount;
@@ -486,6 +492,11 @@ void maskFoldRecrypt(std::vector<std::vector<Number> > &classCountEnc,  std::vec
 	//////////////////////////////////////////////
 	// send the masked classCountEnc to the client
 	//////////////////////////////////////////////
+	if (Configuration::communication.is_open()) {
+		for (unsigned int i_class = 0; i_class < classNum; ++i_class) {
+			Configuration::communication << foldedClassCountEnc[i_class] << std::endl;
+		}
+	}
 
 	// fold and transpose the mask matrix
 	std::vector<std::vector<long int> > foldedMask;
@@ -941,6 +952,14 @@ int RETRIES = 5;
 template<class Number, class NumberBits>
 int secure_knn_classifier(const std::vector<Point<int> > &sites, const std::vector<int> &classes, const Point<int> &query) {
 //	std::vector<std::vector<int> > classesCountVector;
+
+	if (Configuration::communication.is_open()) {
+		for (int i = 0; i < query.dim(); ++i) {
+			std::vector<long> q(Number::simd_factor(), query[i]);
+			Number t(q);
+			Configuration::communication << t << std::endl;
+		}
+	}
 
 	int k = 0.05 * sites.size();
 	for (int i = 0; i < RETRIES; ++i) {

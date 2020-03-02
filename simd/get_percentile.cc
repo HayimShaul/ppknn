@@ -10,12 +10,12 @@
 #include "json.hpp"
 using nlohmann::json;
 
-#include <helib_number.h>
-#include <unsigned_word.h>
-#include <print.h>
-#include <primes.h>
+#include <liphe/helib_number.h>
+#include <liphe/unsigned_word.h>
+#include <liphe/print.h>
+#include <liphe/primes.h>
 
-#include "thread_pool.h"
+#include <liphe/thread_pool.h>
 #include "get_percentile.h"
 #include "configuration.h"
 

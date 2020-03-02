@@ -2,7 +2,7 @@
 #define ___ONE_MEAN___
 
 #include <vector>
-#include <helib_number.h>
+#include <liphe/helib_number.h>
 
 #include "point.h"
 

@@ -7,11 +7,11 @@
 #include <vector>
 #include <thread>
 
-#include <time_measurements.h>
+#include <liphe/time_measurements.h>
 
 #define USE_SIMD
 
-#include "polynomial.h"
+#include <liphe/polynomial.h>
 #include "get_percentile.h"
 #include "special_polynomials.h"
 #include "input_database.h"

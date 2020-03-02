@@ -1,13 +1,13 @@
-#include <zp.h>
-#include <helib_number.h>
+#include <liphe/zp.h>
+#include <liphe/helib_number.h>
 
-#include <eq.h>
-#include "polynomial.h" // Before it gets into Liphe
-#include <cmp.h>
-#include <binomial_tournament.h>
-#include <first_non_zero.h>
-#include <unsigned_word.h>
-#include <average.h>
+#include <liphe/eq.h>
+#include <liphe/polynomial.h>
+#include <liphe/cmp.h>
+#include <liphe/binomial_tournament.h>
+#include <liphe/first_non_zero.h>
+#include <liphe/unsigned_word.h>
+#include <liphe/average.h>
 
 #include "get_percentile_framework.h"
 #include "get_percentile.h"

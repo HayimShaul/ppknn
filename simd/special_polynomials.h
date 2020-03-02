@@ -2,7 +2,7 @@
 #define ___SPECIAL_POLYNOMIALS___
 
 #include <vector>
-#include "polynomial.h"
+#include "liphe/polynomial.h"
 
 template<class Number>
 class SpecialPolynomials {

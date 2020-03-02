@@ -1,14 +1,14 @@
 #include <iostream>
 #include <string.h>
 
-#include <carray_iterator.h>
-#include <helib_number.h>
-#include <eq.h>
-#include "polynomial.h"
-#include <cmp.h>
-#include <binomial_tournament.h>
-#include <unsigned_word.h>
-#include <average.h>
+#include <liphe/carray_iterator.h>
+#include <liphe/helib_number.h>
+#include <liphe/eq.h>
+#include <liphe/polynomial.h>
+#include <liphe/cmp.h>
+#include <liphe/binomial_tournament.h>
+#include <liphe/unsigned_word.h>
+#include <liphe/average.h>
 
 #include "get_percentile_framework.h"
 #include "get_percentile.h"

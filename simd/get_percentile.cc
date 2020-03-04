@@ -179,7 +179,7 @@ enum SetResolutionMethod {
 void initialize(int argc, char **argv) {
 	char defaultFname[] = "-";
 	char *fname = defaultFname;
-//	bool no_query = true;
+	bool no_query = true;
 	int n = -1;
 	int perturb = 0;
 	bool has_fname = false;
@@ -203,6 +203,13 @@ void initialize(int argc, char **argv) {
 			L = atoi(argv[argc_i] + 4);
 		if (memcmp(argv[argc_i], "--perturb=", 10) == 0)
 			perturb = atoi(argv[argc_i] + 10);
+		if (memcmp(argv[argc_i], "--comm=", 7) == 0) {
+			Configuration::communication.open(argv[argc_i] + 7, std::ofstream::out | std::ofstream::trunc);
+			if (!Configuration::communication.is_open()) {
+				std::cerr << "cannot write to file " << (argv[argc_i] + 7) << std::endl;
+				exit(1);
+			}
+		}
 		if (memcmp(argv[argc_i], "--in=", 5) == 0) {
 			fname = argv[argc_i] + 5;
 			has_fname = true;
@@ -223,6 +230,7 @@ void initialize(int argc, char **argv) {
 			std::cout << "   --L=" << std::endl;
 			std::cout << "   --p=" << std::endl;
 			std::cout << "   --perturb=t  perturb by randomly perturbing by [-t,t]^d" << std::endl;
+			std::cout << "   --comm=<filename>  filename to write all communication to" << std::endl;
 			std::cout << "   --n= how many points to generate (can't go with --in)" << std::endl;
 			std::cout << "   --in=  the csv file name of the input" << std::endl;
 //			std::cout << "   --q= query point" << std::endl;
@@ -309,18 +317,19 @@ void initialize(int argc, char **argv) {
 	}
 
 
-//	if (no_query) {
-//		std::default_random_engine generator(clock());
-//		discreteQuery.dim(resolutionInt.dim());
-//		for (unsigned int i = 0; i < resolutionInt.dim(); ++i) {
-//			std::uniform_int_distribution<int> randomX(0, resolutionInt[i]);
-//			discreteQuery[i] = randomX(generator);
-//		}
-//		query = undiscretify(discreteQuery);
-//	} else {
+	assert(no_query);
+	if (no_query) {
+		std::default_random_engine generator(clock());
+		discreteQuery.dim(resolutionInt.dim());
+		for (unsigned int i = 0; i < resolutionInt.dim(); ++i) {
+			std::uniform_int_distribution<int> randomX(0, resolutionInt[i]);
+			discreteQuery[i] = randomX(generator);
+		}
+		query = undiscretify(discreteQuery);
+	} else {
 //		discreteQuery = discretify(query);
-//	}
-//	
+	}
+	
 //
 //
 //	std::cout << "Discrete query: "  << discreteQuery << std::endl;
